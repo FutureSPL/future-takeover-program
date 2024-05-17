@@ -1,0 +1,13 @@
+[package]
+name = "raydium-cp-swap-sdk"
+version = "0.1.0"
+description = "Created with Anchor-IDLGen"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "raydium_cp_swap_sdk"
+
+[dependencies]
+anchor-lang = "0.30.0"
+anchor-i11n = { git = "https://github.com/deanmlittle/anchor-i11n.git" }
