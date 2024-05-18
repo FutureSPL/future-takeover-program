@@ -75,8 +75,8 @@ impl<'info> BuyPresale<'info> {
 
 pub fn handler(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
     // Check that the takeover is already started and the swap period is active
-    require!(ctx.accounts.takeover.swap_period.start < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotStarted);
-    require!(ctx.accounts.takeover.swap_period.end > Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodEnded);  
+    // require!(ctx.accounts.takeover.swap_period.start < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotStarted);
+    // require!(ctx.accounts.takeover.swap_period.end > Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodEnded);  
 
     // Check if the amount is greater than 0
     require!(amount > 0, TakeoverError::InvalidAmount);

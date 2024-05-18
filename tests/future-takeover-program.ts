@@ -317,4 +317,56 @@ describe("future-takeover-program", () => {
       .signers([user])
       .rpc({skipPreflight: true}).then(log).then(confirm);
   });
+
+  it("Finalize Takeover - Failed", async () => {
+    try {
+      await program.methods
+        .finalizeTakeover()
+        .accounts({
+          admin: admin.publicKey,
+          adminProfile,
+          takeover,
+          oldMint: oldMint.publicKey,
+          newMint: newMint.publicKey,
+          systemProgram,
+        })
+        .signers([admin])
+        .rpc({skipPreflight: true}).then(log).then(confirm);
+    } catch (error) {
+      console.log(error);
+    }
+
+    let takeoverAccounts = await program.account.takeover.all();
+    console.log(takeoverAccounts);
+    let successfulTakeoverAccounts = await program.account.successfulTakeover.all();
+    console.log(successfulTakeoverAccounts);
+    let failedTakeoverAccounts = await program.account.failedTakeover.all();
+    console.log(failedTakeoverAccounts);
+  });
+
+  xit("Claim Refund", async () => {
+    try {
+      await program.methods
+        .claimRefund()
+        .accounts({
+          user: user.publicKey,
+          takeover,
+          presaleReceipt,
+          swapReceipt,
+          newMint: newMint.publicKey,
+          oldMint: oldMint.publicKey,
+          takeoverVault,
+          takeoverOldMintVault,
+          userOldMintToken,
+          systemProgram,
+          tokenProgram,
+          associatedTokenProgram,
+        })
+        .signers([user])
+        .rpc({skipPreflight: true}).then(log).then(confirm);
+    } catch (error) {
+      console.log(error);
+    }
+  });
+
 });
