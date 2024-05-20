@@ -20,7 +20,7 @@ use jupiter_sdk::i11n::SharedAccountsRouteI11n;
 use future_takeover_program_sdk::i11n::FinalizeSellI11n;
 
 use crate::{
-    state::{SuccessfulTakeover, AdminProfile, Phase::*},
+    state::{ Takeover, AdminProfile, Phase::*},
     errors::TakeoverError,
 };
 
@@ -52,11 +52,12 @@ pub struct SellToken<'info> {
     )]
     pub wsol_admin_token: Account<'info, TokenAccount>,
     #[account(
+        mut,
         seeds = [b"takeover", old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = old_mint,
     )]
-    pub takeover: Account<'info, SuccessfulTakeover>,
+    pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
         associated_token::mint = old_mint,
@@ -137,7 +138,7 @@ impl<'info> SellToken<'info> {
 pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     // Check if it's the right phase
     match ctx.accounts.takeover.phase {
-        UnlockingAta => (),
+        TokenSelling => (),
         _ => return Err(TakeoverError::InvalidPhase.into()),
     }
 
@@ -158,16 +159,12 @@ pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     let ixs = ctx.accounts.instructions.to_account_info();
     let current_index = load_current_index_checked(&ixs)? as usize;
 
-    // Load the Swap Instruction
+    // Load & Check the Swap Instruction
     let swap_ix = load_instruction_at_checked(current_index + 1, &ixs).map_err(|_| TakeoverError::MissingSwapIx)?;
-
-    // Check the Swap Instruction
     ctx.accounts.introspect_swap(amount, swap_ix)?;
 
-    // Load the Finalize_sell Instruction
+    // Load & Check the Finalize_sell Instruction
     let finalize_sell_ix = load_instruction_at_checked(current_index + 2, &ixs).map_err(|_| TakeoverError::MissingFinalizeSellIx)?;
-
-    // Check the Finalize_sell Instruction
     ctx.accounts.introspect_finalize_sell(finalize_sell_ix)?;
     Ok(())
 }

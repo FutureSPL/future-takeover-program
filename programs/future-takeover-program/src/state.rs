@@ -21,11 +21,12 @@ pub struct Takeover {
     pub inflation_amount: InflationAmount,
     pub presale_price: u64,
     pub presale_claimed: u64,
+    pub phase: Phase,
     pub bump: u8,
 }
 
 impl Space for Takeover {
-    const INIT_SPACE: usize = 8 + 32 + 32 + SwapPeriod::INIT_SPACE + 32 + InflationAmount::INIT_SPACE + 8 + 8 + 1;
+    const INIT_SPACE: usize = 8 + 32 + 32 + SwapPeriod::INIT_SPACE + 32 + InflationAmount::INIT_SPACE + 8 + 8 + Phase::INIT_SPACE + 1;
 }
 
 #[account]
@@ -48,30 +49,6 @@ pub struct SwapReceipt {
 
 impl Space for SwapReceipt {
     const INIT_SPACE: usize = 8 + 32 + 8 + 1;
-}
-
-#[account]
-pub struct FailedTakeover {
-    pub old_mint: Pubkey,
-    pub new_mint: Pubkey,
-    pub presale_price: u64,
-    pub bump: u8,
-}
-
-impl Space for FailedTakeover {
-    const INIT_SPACE: usize = 32 + 32 + 8 + 1;
-}
-
-#[account]
-pub struct SuccessfulTakeover {
-    pub old_mint: Pubkey,
-    pub new_mint: Pubkey,
-    pub phase: Phase,
-    pub bump: u8,
-}
-
-impl Space for SuccessfulTakeover {
-    const INIT_SPACE: usize = 32 + 32 + Phase::INIT_SPACE + 1;
 }
 
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
@@ -97,10 +74,12 @@ pub enum Level {
 
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
 pub enum Phase {
-    TokenSelling,       // 0
-    MarketCreation,     // 1
-    Cleanup,            // 2
-    UnlockingAta,       // 3
+    Ongoing,            // 0
+    FailedTakeover,     // 1
+    TokenSelling,       // 2
+    MarketCreation,     // 3
+    Cleanup,            // 4
+    UnlockingAta,       // 5
 }
 
 

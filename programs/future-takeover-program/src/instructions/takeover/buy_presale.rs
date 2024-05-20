@@ -83,13 +83,16 @@ pub fn handler(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
 
     // Check if there are enough tokens in the presale vault
     let presale_amount = ctx.accounts.old_mint.supply.checked_mul(ctx.accounts.takeover.inflation_amount.presale_basis_point as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?;
-    require!(presale_amount.checked_sub(ctx.accounts.takeover.presale_claimed).ok_or(TakeoverError::Underflow)? >= amount.checked_mul(ctx.accounts.new_mint.decimals as u64).ok_or(TakeoverError::Overflow)?, TakeoverError::NotEnoughTokens);
+    require!(presale_amount.checked_sub(ctx.accounts.takeover.presale_claimed).ok_or(TakeoverError::Underflow)? >= amount, TakeoverError::NotEnoughTokens);
    
     // Initialize the presale receipt
     ctx.accounts.initialize_presale_receipt(amount, ctx.bumps.presale_receipt)?;
 
     // Buy Presale Allocation
     ctx.accounts.buy_presale(amount)?;
+
+    // Add the presale_amount to the Takeover State
+    ctx.accounts.takeover.presale_claimed = ctx.accounts.takeover.presale_claimed.checked_add(amount).ok_or(TakeoverError::Overflow)?;
 
     Ok(())
 }

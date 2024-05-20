@@ -2,7 +2,7 @@ use anchor_lang::{prelude::*, solana_program::system_program};
 use anchor_spl::token::{TokenAccount, Mint, thaw_account, ThawAccount, Token};
 
 use crate::{
-    errors::TakeoverError, state::{SuccessfulTakeover, PresaleReceipt, Phase::*}
+    errors::TakeoverError, state::{ Takeover, PresaleReceipt, Phase::*}
 };
 
 #[derive(Accounts)]
@@ -25,7 +25,7 @@ pub struct UnfreezeToken<'info> {
         bump = takeover.bump,
         has_one = new_mint,
     )]
-    pub takeover: Account<'info, SuccessfulTakeover>,
+    pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
         seeds = [b"presale_receipt", user.key().as_ref()],

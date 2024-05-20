@@ -20,7 +20,7 @@ use anchor_spl::{
 use raydium_cp_swap_sdk::i11n::InitializeI11n;
 
 use crate::{
-    state::{SuccessfulTakeover, AdminProfile, Phase::*},
+    state::{ Takeover, AdminProfile, Phase::*},
     errors::TakeoverError,
 };
 
@@ -57,11 +57,12 @@ pub struct CreateMarket<'info> {
     )]
     pub wsol_admin_token: Account<'info, TokenAccount>,
     #[account(
+        mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = new_mint,
     )]
-    pub takeover: Account<'info, SuccessfulTakeover>,
+    pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
         associated_token::mint = new_mint,
@@ -185,10 +186,8 @@ pub fn handler(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()>
     let ixs = ctx.accounts.instructions.to_account_info();
     let current_index = load_current_index_checked(&ixs)? as usize;
 
-    // Load the Swap Instruction
+    // Load & Check the Market Creation Instruction
     let initialize_ix = load_instruction_at_checked(current_index + 1, &ixs).map_err(|_| TakeoverError::MissingInitializeTx)?;
-
-    // Check the Swap Instruction
     ctx.accounts.introspect_initialize(args.amount_token_0, args.amount_token_1, initialize_ix)?;
 
     Ok(())

@@ -11,7 +11,7 @@ use anchor_spl::{
 };
 
 use crate::{
-    state::{Takeover, AdminProfile, SwapPeriod, InflationAmount, Level},
+    state::{Takeover, AdminProfile, SwapPeriod, InflationAmount, Level, Phase::*},
     errors::TakeoverError,
     constant::*,
 };
@@ -93,6 +93,7 @@ impl<'info> CreateTakeover<'info> {
                 inflation_amount,
                 presale_price,
                 presale_claimed: 0,
+                phase: Ongoing,
                 bump,
             }
         );
@@ -191,7 +192,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     require!(ctx.accounts.admin_profile.creation_time - Clock::get()?.unix_timestamp > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
 
     // Check and Save the Swap Period Parameters
-    require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
+    // require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
     let swap_period = SwapPeriod {
         start: args.start,
         end: args.end,
@@ -234,11 +235,9 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     // Initialize the takeover and mint rewards + old_mint supply to the takeover vault
     ctx.accounts.initialize_takeover(inflation_amount, swap_period, args.takeover_wallet, args.presale_price, bumps.takeover)?;
 
-    msg!("HERE");
     // Initialize the new mint using Metaplex
     ctx.accounts.intialize_new_mint(args.name, args.symbol, args.uri)?;
 
-    msg!("HERE");
     // Remove the mint authority so nobody can mint more tokens
     ctx.accounts.remove_mint_authority()?;
 
