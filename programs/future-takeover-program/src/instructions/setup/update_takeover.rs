@@ -51,7 +51,7 @@ pub fn handler(ctx: Context<UpdateTakeover>, args: UpdateTakeoverArgs) -> Result
     require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp - TAKEOVER_BUFFER, TakeoverError::TakeoverAlreadyStarted);
 
     // Check if the admin has been initialized more than 16h ago
-    require!(ctx.accounts.admin_profile.creation_time - Clock::get()?.unix_timestamp > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
 
     // Check the Swap Period Parameters
     require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);

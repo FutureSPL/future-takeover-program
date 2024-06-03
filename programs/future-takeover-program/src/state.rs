@@ -60,9 +60,9 @@ pub struct SwapPeriod {
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
 pub struct InflationAmount {
     pub level: Level,
-    pub rewards_basis_point: u16,
-    pub treasury_basis_point: u16,
-    pub presale_basis_point: u16,
+    pub rewards_amount: u64,
+    pub treasury_amount: u64,
+    pub presale_amount: u64,
 }
 
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
@@ -79,7 +79,7 @@ pub enum Phase {
     TokenSelling,       // 2
     MarketCreation,     // 3
     Cleanup,            // 4
-    UnlockingAta,       // 5
+    ClaimTokens,        // 5
 }
 
 

@@ -21,8 +21,16 @@ pub const HIGH_REWARDS_BASIS_POINT: u16 = 100;
 pub const HIGH_TREASURY_BASIS_POINT: u16 = 350;
 pub const HIGH_PRESALE_BASIS_POINT: u16 = 500;
 
+// Success Presale Amount
+pub const SUCCESS_PERCENTAGE: u64 = 60;
+
 
 pub mod admin_wallet {
+    use super::*;
+    declare_id!("2YkGRHjwD3jqcu4ie6pL9Axpdx5AKa6KDyj8bF473Vk5");
+}
+
+pub mod reward_wallet {
     use super::*;
     declare_id!("2YkGRHjwD3jqcu4ie6pL9Axpdx5AKa6KDyj8bF473Vk5");
 }

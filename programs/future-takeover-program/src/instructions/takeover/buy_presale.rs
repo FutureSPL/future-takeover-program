@@ -16,7 +16,7 @@ pub struct BuyPresale<'info> {
 
     #[account(
         mut,
-        seeds = [b"takeover", old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -24,7 +24,7 @@ pub struct BuyPresale<'info> {
         init,
         payer = user,
         space = PresaleReceipt::INIT_SPACE,
-        seeds = [b"presale_receipt", user.key().as_ref()],
+        seeds = [b"presale_receipt", takeover.key().as_ref(), user.key().as_ref()],
         bump,
     )]
     pub presale_receipt: Account<'info, PresaleReceipt>,
@@ -35,8 +35,6 @@ pub struct BuyPresale<'info> {
         bump,
     )]
     pub takeover_vault: SystemAccount<'info>,
-    #[account(mut)]
-    pub old_mint: Account<'info, Mint>,
     pub new_mint: Account<'info, Mint>,
 
     pub system_program: Program<'info, System>,
@@ -82,8 +80,7 @@ pub fn handler(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
     require!(amount > 0, TakeoverError::InvalidAmount);
 
     // Check if there are enough tokens in the presale vault
-    let presale_amount = ctx.accounts.old_mint.supply.checked_mul(ctx.accounts.takeover.inflation_amount.presale_basis_point as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?;
-    require!(presale_amount.checked_sub(ctx.accounts.takeover.presale_claimed).ok_or(TakeoverError::Underflow)? >= amount, TakeoverError::NotEnoughTokens);
+    require!(ctx.accounts.takeover.inflation_amount.presale_amount.checked_sub(ctx.accounts.takeover.presale_claimed).ok_or(TakeoverError::Underflow)? >= amount, TakeoverError::NotEnoughTokens);
    
     // Initialize the presale receipt
     ctx.accounts.initialize_presale_receipt(amount, ctx.bumps.presale_receipt)?;

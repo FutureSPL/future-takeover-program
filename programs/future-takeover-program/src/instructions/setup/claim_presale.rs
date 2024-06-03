@@ -86,10 +86,10 @@ impl<'info> ClaimPresale<'info> {
 
 pub fn handler(ctx: Context<ClaimPresale>) -> Result<()> {
     // Check that the takeover is not going to start in the next 24h (?)
-    require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp - 24 * 60 * 60, TakeoverError::TakeoverAlreadyStarted);
+    require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp - TAKEOVER_BUFFER, TakeoverError::TakeoverAlreadyStarted);
 
     // Check if the admin has been initialized more than 16h ago
-    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > 16 * 60 * 60, TakeoverError::UnauthorizedAdmin);
+    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
 
     // Claim the Presale tokens in the vault
     ctx.accounts.claim_presale()?;

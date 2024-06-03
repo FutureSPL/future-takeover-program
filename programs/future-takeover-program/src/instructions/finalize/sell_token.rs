@@ -110,8 +110,7 @@ impl<'info> SellToken<'info> {
         // Checking that this is the right Swap Instruction
         let instruction = SharedAccountsRouteI11n::try_from(&swap_ix).unwrap();
 
-        // Checking the Args like: slippage = 50bps, in_amount = amount
-        require_gte!(instruction.args.slippage_bps, 50, TakeoverError::InvalidSwapSlippage);
+        // Checking the Args like: in_amount = amount
         require_eq!(instruction.args.in_amount, amount, TakeoverError::InvalidSwapAmount);
 
         // Checking the Accounts like: source Token and TokenAccount + destination Token and TokenAccount
@@ -166,5 +165,6 @@ pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     // Load & Check the Finalize_sell Instruction
     let finalize_sell_ix = load_instruction_at_checked(current_index + 2, &ixs).map_err(|_| TakeoverError::MissingFinalizeSellIx)?;
     ctx.accounts.introspect_finalize_sell(finalize_sell_ix)?;
+    
     Ok(())
 }

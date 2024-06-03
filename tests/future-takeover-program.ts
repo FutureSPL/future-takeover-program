@@ -60,7 +60,7 @@ describe("future-takeover-program", () => {
     Keypair.generate()
   );
 
-  const [adminAtaA, adminAtaB, userOldMintToken, userNewMintToken] = [admin, user]
+  const [adminOldMintToken, adminNewMintToken, userOldMintToken, userNewMintToken] = [admin, user]
     .map((a) =>
       [oldMint, newMint].map((m) =>
         getAssociatedTokenAddressSync(m.publicKey, a.publicKey, false, tokenProgram)
@@ -84,12 +84,12 @@ describe("future-takeover-program", () => {
   )[0];
 
   const swapReceipt = PublicKey.findProgramAddressSync(
-    [Buffer.from("swap_receipt"), user.publicKey.toBuffer()],
+    [Buffer.from("swap_receipt"), takeover.toBuffer(), user.publicKey.toBuffer()],
     program.programId
   )[0];
 
   const presaleReceipt = PublicKey.findProgramAddressSync(
-    [Buffer.from("presale_receipt"), user.publicKey.toBuffer()],
+    [Buffer.from("presale_receipt"), takeover.toBuffer(), user.publicKey.toBuffer()],
     program.programId
   )[0];
 
@@ -402,31 +402,6 @@ describe("future-takeover-program", () => {
           systemProgram,
         })
         .signers([admin])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
-  });
-
-  it("Claim Refund", async () => {
-    try {
-      await program.methods
-        .claimRefund()
-        .accounts({
-          user: user.publicKey,
-          takeover,
-          presaleReceipt,
-          swapReceipt,
-          newMint: newMint.publicKey,
-          oldMint: oldMint.publicKey,
-          takeoverVault,
-          takeoverOldMintVault,
-          userOldMintToken,
-          systemProgram,
-          tokenProgram,
-          associatedTokenProgram,
-        })
-        .signers([user])
         .rpc({skipPreflight: true}).then(log).then(confirm);
     } catch (error) {
       console.log(error);

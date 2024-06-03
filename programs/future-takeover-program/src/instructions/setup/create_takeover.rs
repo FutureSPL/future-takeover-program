@@ -36,7 +36,7 @@ pub struct CreateTakeover<'info> {
         seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
-    pub admin_profile: Account<'info, AdminProfile>,
+    pub admin_profile: Box<Account<'info, AdminProfile>>,
 
     #[account(
         init,
@@ -45,16 +45,16 @@ pub struct CreateTakeover<'info> {
         bump,
         space = Takeover::INIT_SPACE,
     )]
-    pub takeover: Account<'info, Takeover>,
+    pub takeover: Box<Account<'info, Takeover>>,
     
-    pub old_mint: Account<'info, Mint>,
+    pub old_mint: Box<Account<'info, Mint>>,
     #[account(
         init,
         payer = admin,
         mint::decimals = old_mint.decimals,
         mint::authority = admin,
     )]
-    pub new_mint: Account<'info, Mint>,
+    pub new_mint: Box<Account<'info, Mint>>,
     #[account(mut)]
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
     pub metadata: AccountInfo<'info>,
@@ -64,7 +64,7 @@ pub struct CreateTakeover<'info> {
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
     )]
-    pub takeover_new_mint_vault: Account<'info, TokenAccount>,
+    pub takeover_new_mint_vault: Box<Account<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
@@ -76,13 +76,6 @@ pub struct CreateTakeover<'info> {
 
 impl<'info> CreateTakeover<'info> {
     fn initialize_takeover(&mut self,  inflation_amount: InflationAmount, swap_period: SwapPeriod, takeover_wallet: Pubkey, presale_price: u64, bump: u8) -> Result<()> {
-        // Calculate the presale amount: rewards% of the old mint supply
-        let presale_amount = self.old_mint.supply.checked_mul(inflation_amount.presale_basis_point as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?;
-        // Calculate the treasury amount: rewards% of the old mint supply
-        let treasury_amount = self.old_mint.supply.checked_mul(inflation_amount.treasury_basis_point as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?;
-        // Calculate the rewards amount: rewards% of the old mint supply
-        let rewards_amount = self.old_mint.supply.checked_mul(inflation_amount.rewards_basis_point as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?;
-
         // Populate the takeover account
         self.takeover.set_inner(
             Takeover {
@@ -90,7 +83,7 @@ impl<'info> CreateTakeover<'info> {
                 new_mint: self.new_mint.key(),
                 swap_period,
                 takeover_wallet,
-                inflation_amount,
+                inflation_amount: inflation_amount.clone(),
                 presale_price,
                 presale_claimed: 0,
                 phase: Ongoing,
@@ -100,9 +93,9 @@ impl<'info> CreateTakeover<'info> {
 
         // Mint the new supply + the inflation amount to the takeover vault
         let amount = self.old_mint.supply
-            .checked_add(presale_amount).ok_or(TakeoverError::Overflow)?
-            .checked_add(treasury_amount).ok_or(TakeoverError::Overflow)?
-            .checked_add(rewards_amount).ok_or(TakeoverError::Overflow)?;
+            .checked_add(inflation_amount.presale_amount.clone()).ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.treasury_amount.clone()).ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.rewards_amount.clone()).ok_or(TakeoverError::Overflow)?;
 
         mint_to(
             CpiContext::new(
@@ -139,7 +132,7 @@ impl<'info> CreateTakeover<'info> {
             update_authority,
             system_program,
             sysvar_instructions,
-            spl_token_program: Some(spl_token_program),
+            spl_token_program: spl_token_program,
             master_edition,
         };
 
@@ -189,7 +182,7 @@ impl<'info> CreateTakeover<'info> {
 
 pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result<()> {
     // Check if the admin has been initialized more than 16h ago
-    require!(ctx.accounts.admin_profile.creation_time - Clock::get()?.unix_timestamp > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
 
     // Check and Save the Swap Period Parameters
     // require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
@@ -201,29 +194,32 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     // Set parameters for rewards, presale and treasury based on the FDMC
     let inflation_amount: InflationAmount;
 
+    
+
+
     match args.fdmc {
         0 => {
             inflation_amount = InflationAmount {
                 level: Level::Low,
-                rewards_basis_point: LOW_REWARDS_BASIS_POINT,
-                treasury_basis_point: LOW_TREASURY_BASIS_POINT,
-                presale_basis_point: LOW_PRESALE_BASIS_POINT,
+                presale_amount: ctx.accounts.old_mint.supply.checked_mul(LOW_PRESALE_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(LOW_TREASURY_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(LOW_REWARDS_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
             };
         }
         1 => {
             inflation_amount = InflationAmount {
                 level: Level::Medium,
-                rewards_basis_point: MEDIUM_REWARDS_BASIS_POINT,
-                treasury_basis_point: MEDIUM_TREASURY_BASIS_POINT,
-                presale_basis_point: MEDIUM_PRESALE_BASIS_POINT,
+                presale_amount: ctx.accounts.old_mint.supply.checked_mul(MEDIUM_PRESALE_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(MEDIUM_TREASURY_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(MEDIUM_REWARDS_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
             };
         }
         2 => {
             inflation_amount = InflationAmount {
                 level: Level::High,
-                rewards_basis_point: HIGH_REWARDS_BASIS_POINT,
-                treasury_basis_point: HIGH_TREASURY_BASIS_POINT,
-                presale_basis_point: HIGH_PRESALE_BASIS_POINT,
+                presale_amount: ctx.accounts.old_mint.supply.checked_mul(HIGH_PRESALE_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(HIGH_TREASURY_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(HIGH_REWARDS_BASIS_POINT as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
             };
         }
         _ => return Err(TakeoverError::InvalidFdmcValue.into()),

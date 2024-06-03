@@ -24,7 +24,7 @@ pub struct SwapOldToken<'info> {
         init,
         payer = user,
         space = SwapReceipt::INIT_SPACE,
-        seeds = [b"swap_receipt", user.key().as_ref()],
+        seeds = [b"swap_receipt", takeover.key().as_ref(), user.key().as_ref()],
         bump,
     )]
     pub swap_receipt: Account<'info, SwapReceipt>,
@@ -62,6 +62,7 @@ impl<'info> SwapOldToken<'info> {
     
         Ok(())
     }
+    
     fn deposit_old_token(&mut self) -> Result<()> {
         // Transfer the old tokens from the user to the takeover vault
         transfer(

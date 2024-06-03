@@ -24,22 +24,22 @@ pub struct FinalizeSellToken<'info> {
         seeds = [b"admin_profile", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
-    pub admin_profile: Account<'info, AdminProfile>,
+    pub admin_profile: Box<Account<'info, AdminProfile>>,
 
     #[account( address = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap())]
-    pub wsol: Account<'info, Mint>,
+    pub wsol: Box<Account<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = wsol,
         associated_token::authority = admin,
     )]
-    pub wsol_admin_token: Account<'info, TokenAccount>,
+    pub wsol_admin_token: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
-    pub takeover: Account<'info, Takeover>,
+    pub takeover: Box<Account<'info, Takeover>>,
     #[account(
         mut,
         seeds = [b"takeover_vault", takeover.key().as_ref()],
@@ -62,7 +62,7 @@ impl<'info> FinalizeSellToken<'info> {
                 self.token_program.to_account_info(), 
                 CloseAccount {
                     account: self.wsol_admin_token.to_account_info(),
-                    destination: self.admin.to_account_info(),
+                    destination: self.takeover_sol_vault.to_account_info(),
                     authority: self.admin.to_account_info(),
                 }
             )

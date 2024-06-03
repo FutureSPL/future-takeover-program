@@ -86,7 +86,11 @@ impl<'info> CancelTakeover<'info> {
 
 pub fn handler(ctx: Context<CancelTakeover>) -> Result<()> {
     // Check if the admin has been initialized more than 16h ago
-    require!(ctx.accounts.admin_profile.creation_time - Clock::get()?.unix_timestamp > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+
+    // Check if the takeover has not started yet
+    require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp, TakeoverError::TakeoverAlreadyStarted);
+
 
     // Empty and burn the takeover vault amount
     ctx.accounts.empty_and_burn_takeover_vault()?;

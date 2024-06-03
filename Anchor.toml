@@ -7,11 +7,14 @@ skip-lint = false
 [programs.localnet]
 future_takeover_program = "6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5"
 
+[programs.devnet]
+future_takeover_program = "6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "devnet"
 wallet = "/Users/leo/.config/solana/id.json"
 
 [scripts]
