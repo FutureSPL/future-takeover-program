@@ -1,6 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN, Address } from "@coral-xyz/anchor";
 import { FutureTakeoverProgram, IDL } from "../target/types/future_takeover_program";
+import { Randomness, OracleJob } from "@switchboard-xyz/on-demand"; 
 import {
   Keypair,
   LAMPORTS_PER_SOL,
@@ -407,4 +408,6 @@ describe("future-takeover-program", () => {
       console.log(error);
     }
   });
+
+
 });

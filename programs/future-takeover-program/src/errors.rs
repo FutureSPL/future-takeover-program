@@ -14,6 +14,8 @@ pub enum TakeoverError {
     InvalidFdmcValue,
     #[msg("The takeover has already started.")]
     TakeoverAlreadyStarted,
+    #[msg("You used Invalid Inflation Amounts.")]
+    InvalidInflationAmounts,
 
     // Takeover Errors
     #[msg("You need to wait for the swap period to start")]

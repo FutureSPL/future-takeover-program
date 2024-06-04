@@ -60,14 +60,20 @@ pub mod future_takeover_program {
         instructions::finalize_sell::handler(ctx)
     }
 
-    // pub create_market(ctx: Context<CreateMarket>) -> Result<()> {
-    //     instructions::create_market::handler(ctx)
-    // }
+    pub fn open_and_deposit_position(ctx: Context<OpenAndDepositPosition>, args: OpenAndDepositPositionArgs) -> Result<()> {
+        instructions::open_and_deposit_position::handler(ctx, args)
+    }
+
+    pub fn cleanup(ctx: Context<Cleanup>) -> Result<()> {
+        instructions::cleanup::handler(ctx)
+    }
+
+    pub fn claim_tokens(ctx: Context<ClaimTokens>) -> Result<()> {
+        instructions::claim_tokens::handler(ctx)
+    }
 
     // - Failed Takeover    
     pub fn claim_refund(ctx: Context<ClaimRefund>) -> Result<()> {
         instructions::claim_refund::handler(ctx)
     }
-
-
 }

@@ -22,9 +22,9 @@ pub struct Cleanup<'info> {
         seeds = [b"admin_profile", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
-    pub admin_profile: Account<'info, AdminProfile>,
+    pub admin_profile: Box<Account<'info, AdminProfile>>,
 
-    pub new_mint: Account<'info, Mint>,
+    pub new_mint: Box<Account<'info, Mint>>,
     #[account(mut)]
     pub takeover_wallet: SystemAccount<'info>,
     #[account(mut, address = reward_wallet::ID)]
@@ -35,27 +35,27 @@ pub struct Cleanup<'info> {
         associated_token::mint = new_mint,
         associated_token::authority = reward_wallet,
     )]
-    pub new_mint_reward_wallet_token: Account<'info, TokenAccount>,
+    pub new_mint_reward_wallet_token: Box<Account<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = new_mint,
         associated_token::authority = takeover_wallet,
     )]
-    pub new_mint_takeover_wallet_token: Account<'info, TokenAccount>,
+    pub new_mint_takeover_wallet_token: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = takeover_wallet
     )]
-    pub takeover: Account<'info, Takeover>,
+    pub takeover: Box<Account<'info, Takeover>>,
     #[account(
         mut,
         associated_token::mint = takeover.new_mint,
         associated_token::authority = takeover,
     )]
-    pub new_mint_takeover_vault: Account<'info, TokenAccount>,
+    pub new_mint_takeover_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover_vault", takeover.key().as_ref()],

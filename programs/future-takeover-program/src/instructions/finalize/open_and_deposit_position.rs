@@ -17,6 +17,7 @@ use crate::{
     errors::TakeoverError,
 };
 
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct OpenAndDepositPositionArgs {
     pub tick_lower_index: i32,
     pub tick_upper_index: i32,
