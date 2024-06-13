@@ -18,7 +18,7 @@ default = []
 [dependencies]
 anchor-lang = { version = "0.29.0", features = ["init-if-needed"] }
 anchor-spl = { version = "0.29.0", features = ["metadata"] }
-whirlpool-cpi = { git = "https://github.com/orca-so/whirlpool-cpi", branch = "anchor/0.29.0" }
 jupiter-sdk = { path = "../../i11n/jupiter" }
+whirlpool-sdk = { path = "../../i11n/whirlpool" }
 future-takeover-program-sdk = { path = "../../i11n/future_takeover_program" }
 

@@ -19,7 +19,7 @@ pub struct Cleanup<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
-        seeds = [b"admin_profile", admin.key().as_ref()],
+        seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
     pub admin_profile: Box<Account<'info, AdminProfile>>,
@@ -139,10 +139,10 @@ impl<'info> Cleanup<'info> {
 
 pub fn handler(ctx: Context<Cleanup>) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        Cleanup => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     Cleanup => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // }
 
     // Change the phase
     ctx.accounts.takeover.phase = ClaimTokens;

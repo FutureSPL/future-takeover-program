@@ -29,12 +29,12 @@ pub struct SellToken<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
-        seeds = [b"admin_profile", admin.key().as_ref()],
+        seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
     pub admin_profile: Account<'info, AdminProfile>,
 
-    pub old_mint: Account<'info, Mint>,
+    pub old_mint: Box<Account<'info, Mint>>,
     #[account( address = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap())]
     pub wsol: Account<'info, Mint>,
     #[account(
@@ -43,14 +43,14 @@ pub struct SellToken<'info> {
         associated_token::mint = old_mint,
         associated_token::authority = admin,
     )]
-    pub old_mint_admin_token: Account<'info, TokenAccount>,
+    pub old_mint_admin_token: Box<Account<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = wsol,
         associated_token::authority = admin,
     )]
-    pub wsol_admin_token: Account<'info, TokenAccount>,
+    pub wsol_admin_token: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover", old_mint.key().as_ref()],
@@ -63,7 +63,7 @@ pub struct SellToken<'info> {
         associated_token::mint = old_mint,
         associated_token::authority = takeover,
     )]
-    pub old_mint_takeover_vault: Account<'info, TokenAccount>,
+    pub old_mint_takeover_vault: Box<Account<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover_vault", takeover.key().as_ref()],
@@ -136,10 +136,10 @@ impl<'info> SellToken<'info> {
 
 pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        TokenSelling => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     TokenSelling => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // }
 
     // Check if the amount requested is valid
     require!(amount > 0, TakeoverError::InvalidAmount);

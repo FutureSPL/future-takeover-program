@@ -23,14 +23,14 @@ pub struct ClaimRefund<'info> {
     pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
-        seeds = [b"presale_receipt", user.key().as_ref()],
+        seeds = [b"presale_receipt", takeover.key().as_ref(), user.key().as_ref()],
         bump,
     )]
     /// CHECK: This account gets checked during the instruction since it could be uninitialized
     pub presale_receipt: UncheckedAccount<'info>,
     #[account(
         mut,
-        seeds = [b"swap_receipt", user.key().as_ref()],
+        seeds = [b"swap_receipt", takeover.key().as_ref(), user.key().as_ref()],
         bump,
     )]
     /// CHECK: This account gets checked during the instruction since it could be uninitialized
@@ -118,10 +118,10 @@ impl<'info> ClaimRefund<'info> {
 
 pub fn handler(ctx: Context<ClaimRefund>) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        FailedTakeover => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     FailedTakeover => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // }
 
     // Verify if there is a swap receipt account and if there is, refund the presale
     let info = ctx.accounts.swap_receipt.to_account_info();

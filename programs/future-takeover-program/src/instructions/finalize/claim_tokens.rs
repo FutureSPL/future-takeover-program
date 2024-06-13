@@ -85,10 +85,10 @@ impl<'info> ClaimTokens<'info> {
 
 pub fn handler(ctx: Context<ClaimTokens>) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        ClaimTokens => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     ClaimTokens => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // }
 
     // Verify if there is a swap receipt account and if there is, give the new_tokens
     let info = ctx.accounts.swap_receipt.to_account_info();

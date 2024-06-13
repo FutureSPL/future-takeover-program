@@ -997,26 +997,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "default-boxed"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b48cc7cb0b3bcd8acee5eb26e45f8f4b597c5e57a67deb86e3d1d4a1e57a1c31"
-dependencies = [
- "default-boxed-derive",
-]
-
-[[package]]
-name = "default-boxed-derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94bbd6a078996f7e3af0e053377eb5577dee801eae2f22af2cd1e58fa33a0f5e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "derivation-path"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1133,7 +1113,7 @@ dependencies = [
  "anchor-spl",
  "future-takeover-program-sdk",
  "jupiter-sdk",
- "whirlpool-cpi",
+ "whirlpool-sdk",
 ]
 
 [[package]]
@@ -2759,15 +2739,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "whirlpool-cpi"
-version = "0.1.0"
-source = "git+https://github.com/orca-so/whirlpool-cpi?branch=anchor/0.29.0#56d54dd19eff49e590e61c664902af27e1e0e0c8"
+name = "whirlpool-sdk"
+version = "0.2.0"
 dependencies = [
- "anchor-lang 0.29.0",
- "anchor-spl",
- "bincode",
- "default-boxed",
- "solana-program",
+ "anchor-i11n",
+ "anchor-lang 0.30.0",
 ]
 
 [[package]]

@@ -1,0 +1,13 @@
+[package]
+name = "whirlpool-sdk"
+version = "0.2.0"
+description = "Created with Anchor-IDLGen"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "whirlpool_sdk"
+
+[dependencies]
+anchor-lang = "0.30.0"
+anchor-i11n = { git = "https://github.com/deanmlittle/anchor-i11n.git" }

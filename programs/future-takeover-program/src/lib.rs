@@ -7,7 +7,7 @@ pub mod constant;
 pub mod instructions;
 pub use instructions::*;
 
-declare_id!("Az7xrYvsyP7M6vC955gEk5sCp4XkX1dCREh1TrP5b5wB");
+declare_id!("B9RoqgofLfoHRTrjrZ5ZdAzRbwsfzkTxBgeTZV2tvVwa");
 
 #[program]
 pub mod future_takeover_program {
@@ -60,8 +60,8 @@ pub mod future_takeover_program {
         instructions::finalize_sell::handler(ctx)
     }
 
-    pub fn open_and_deposit_position(ctx: Context<OpenAndDepositPosition>, args: OpenAndDepositPositionArgs) -> Result<()> {
-        instructions::open_and_deposit_position::handler(ctx, args)
+    pub fn open_and_deposit_position(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {
+        instructions::create_market::handler(ctx, args)
     }
 
     pub fn cleanup(ctx: Context<Cleanup>) -> Result<()> {

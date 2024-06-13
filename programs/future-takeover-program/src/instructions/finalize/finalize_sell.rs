@@ -21,7 +21,7 @@ pub struct FinalizeSellToken<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
-        seeds = [b"admin_profile", admin.key().as_ref()],
+        seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
     pub admin_profile: Box<Account<'info, AdminProfile>>,

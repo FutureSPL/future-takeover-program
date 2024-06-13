@@ -70,6 +70,17 @@ pub enum TakeoverError {
     #[msg("The Initialize Instruction has invalid Mint Account.")]
     InvalidInitializeMintAccount,
 
+    #[msg("The Increase Liquidity Instruction is missing.")]
+    MissingIncreaseLiquidityIx,
+    #[msg("The Token A used to create the market is not the same as what you received.")]
+    WrongAmountTokenA,
+    #[msg("The Token B used to create the market is not the same as what you received.")]
+    WrongAmountTokenB,
+    #[msg("The Token A ATA used to create the market is not the same as what is expected.")]
+    WrongAtaTokenA,
+    #[msg("The Token B ATA used to create the market is not the same as what is expected.")]
+    WrongAtaTokenB,
+
     // General Errors
     #[msg("Overflow")]
     Overflow,
