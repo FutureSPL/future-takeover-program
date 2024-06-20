@@ -18,3 +18,6 @@ pub use create_market::*;
 
 pub mod cleanup;
 pub use cleanup::*;
+
+pub mod distribute_rewards;
+pub use distribute_rewards::*;

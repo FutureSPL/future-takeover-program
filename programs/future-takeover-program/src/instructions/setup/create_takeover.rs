@@ -29,6 +29,8 @@ pub struct CreateTakeoverArgs {
     pub presale_inflation: u16,
     pub treasury_inflation: u16,
     pub rewards_inflation: u16,
+    pub referral: Option<Pubkey>,
+    pub referral_split: Option<u16>,
 }
 
 #[derive(Accounts)]
@@ -78,7 +80,7 @@ pub struct CreateTakeover<'info> {
 }
 
 impl<'info> CreateTakeover<'info> {
-    fn initialize_takeover(&mut self,  inflation_amount: InflationAmount, swap_period: SwapPeriod, takeover_wallet: Pubkey, presale_price: u64, bump: u8) -> Result<()> {
+    fn initialize_takeover(&mut self,  inflation_amount: InflationAmount, swap_period: SwapPeriod, takeover_wallet: Pubkey, presale_price: u64, referral: Option<Pubkey>, bump: u8) -> Result<()> {
         // Populate the takeover account
         self.takeover.set_inner(
             Takeover {
@@ -86,9 +88,11 @@ impl<'info> CreateTakeover<'info> {
                 new_mint: self.new_mint.key(),
                 swap_period,
                 takeover_wallet,
+                referral,
                 inflation_amount: inflation_amount.clone(),
                 presale_price,
                 presale_claimed: 0,
+                token_swapped: 0,
                 phase: Ongoing,
                 bump,
             }
@@ -180,7 +184,6 @@ impl<'info> CreateTakeover<'info> {
 
         Ok(())
     }
-    
 }
 
 pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result<()> {
@@ -188,7 +191,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
 
     // Check and Save the Swap Period Parameters
-    // require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
+    require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
     let swap_period = SwapPeriod {
         start: args.start,
         end: args.end,
@@ -196,45 +199,69 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
 
     // Set parameters for rewards, presale and treasury based on the FDMC
     let inflation_amount: InflationAmount;
-    
+
+    let presale_amount: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
+        .checked_mul(args.presale_inflation as u64).ok_or(TakeoverError::Overflow)?;
+
+    let treasury_amount: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
+        .checked_mul(args.treasury_inflation as u64).ok_or(TakeoverError::Overflow)?;
+
+    let rewards_amount: u64;
+    let referral_amount: u64;
+
+    if let Some(referral_split) = args.referral_split {
+        let tmp: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
+            .checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?;
+        referral_amount = tmp.checked_mul(referral_split as u64).ok_or(TakeoverError::Overflow)?
+            .checked_div(10000).ok_or(TakeoverError::Underflow)?;
+        rewards_amount = tmp.checked_sub(referral_amount).ok_or(TakeoverError::Underflow)?;
+    } else {
+        rewards_amount = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
+            .checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?;
+        referral_amount = 0;
+    }
+
     match args.fdmc {
         0 => {
             require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && args.rewards_inflation >= 0 &&
+                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
                 args.presale_inflation < LOW_PRESALE_BASIS_POINT && args.treasury_inflation < LOW_TREASURY_BASIS_POINT && args.rewards_inflation < LOW_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {
                 level: Level::Low,
-                presale_amount: ctx.accounts.old_mint.supply.checked_mul(args.presale_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(args.treasury_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                presale_amount,
+                treasury_amount, 
+                rewards_amount,
+                referral_amount
             };
         }
         1 => {
             require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && args.rewards_inflation >= 0 &&
+                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
                 args.presale_inflation < MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation < MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation < MEDIUM_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {
                 level: Level::Medium,
-                presale_amount: ctx.accounts.old_mint.supply.checked_mul(args.presale_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(args.treasury_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                presale_amount,
+                treasury_amount, 
+                rewards_amount,
+                referral_amount
             };
         }
         2 => {
             require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && args.rewards_inflation >= 0 &&
+                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
                 args.presale_inflation < HIGH_PRESALE_BASIS_POINT && args.treasury_inflation < HIGH_TREASURY_BASIS_POINT && args.rewards_inflation < HIGH_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {
                 level: Level::High,
-                presale_amount: ctx.accounts.old_mint.supply.checked_mul(args.presale_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                treasury_amount: ctx.accounts.old_mint.supply.checked_mul(args.treasury_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
-                rewards_amount: ctx.accounts.old_mint.supply.checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?.checked_div(10000).ok_or(TakeoverError::Underflow)?,
+                presale_amount,
+                treasury_amount, 
+                rewards_amount,
+                referral_amount
             };
         }
         _ => return Err(TakeoverError::InvalidFdmcValue.into()),
@@ -244,7 +271,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     let bumps = ctx.bumps;
 
     // Initialize the takeover and mint rewards + old_mint supply to the takeover vault
-    ctx.accounts.initialize_takeover(inflation_amount, swap_period, args.takeover_wallet, args.presale_price, bumps.takeover)?;
+    ctx.accounts.initialize_takeover(inflation_amount, swap_period, args.takeover_wallet, args.presale_price, args.referral, bumps.takeover)?;
 
     // Initialize the new mint using Metaplex
     ctx.accounts.intialize_new_mint(args.name, args.symbol, args.uri)?;

@@ -11,7 +11,7 @@ use anchor_lang::{
 
 use anchor_spl::token::{ Mint, Token, TokenAccount, close_account, CloseAccount };
 
-use jupiter_sdk::i11n::SharedAccountsRouteI11n;
+use jupiter_sdk::i11n::RouteI11n;
 use future_takeover_program_sdk::i11n::SellTokenI11n;
 
 use crate::state::{Takeover, AdminProfile};
@@ -95,7 +95,7 @@ pub fn handler(ctx: Context<FinalizeSellToken>) -> Result<()> {
 
     // Load the Swap Instruction and grap the Sol Amount
     let swap_ix = load_instruction_at_checked( current_index - 1, &ixs)?;
-    let swap_instruction = SharedAccountsRouteI11n::try_from(&swap_ix).unwrap();
+    let swap_instruction = RouteI11n::try_from(&swap_ix).unwrap();
     let swapped_amount = swap_instruction.args.quoted_out_amount;
 
     // Close the wSol Account and send it to the vault

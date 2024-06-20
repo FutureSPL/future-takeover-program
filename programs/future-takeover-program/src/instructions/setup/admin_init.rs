@@ -57,7 +57,7 @@ impl<'info> AdminInit<'info> {
 
 pub fn handler(ctx: Context<AdminInit>, username: String) -> Result<()> {
     // Make sure it's the admin of the protocol that is initializing the new admin and that the new admin is not the admin of the protocol
-    // require!(ctx.accounts.owner.key() == ADMIN::id() && ctx.accounts.owner.key() != ctx.accounts.new_admin.key(), TakeoverError::Unauthorized);
+    require!(ctx.accounts.owner.key() == ADMIN::id() && ctx.accounts.owner.key() != ctx.accounts.new_admin.key(), TakeoverError::Unauthorized);
 
     // Generate the bumps
     let bumps = ctx.bumps;

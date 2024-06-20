@@ -83,8 +83,8 @@ impl<'info> SwapOldToken<'info> {
 
 pub fn handler(ctx: Context<SwapOldToken>) -> Result<()> {
     // Check that the takeover is already started and the swap period is active
-    // require!(ctx.accounts.takeover.swap_period.start < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotStarted);
-    // require!(ctx.accounts.takeover.swap_period.end > Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodEnded);  
+    require!(ctx.accounts.takeover.swap_period.start < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotStarted);
+    require!(ctx.accounts.takeover.swap_period.end > Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodEnded);  
 
     // Check if the amount is greater than 0
     require!(ctx.accounts.user_old_mint_token.amount > 0, TakeoverError::InvalidAmount);
@@ -94,6 +94,8 @@ pub fn handler(ctx: Context<SwapOldToken>) -> Result<()> {
 
     // Deposit the old token
     ctx.accounts.deposit_old_token()?;
+
+    ctx.accounts.takeover.token_swapped = ctx.accounts.takeover.token_swapped.checked_add(ctx.accounts.user_old_mint_token.amount).ok_or(TakeoverError::Overflow)?;
 
     Ok(())
 }

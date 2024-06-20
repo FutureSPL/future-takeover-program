@@ -27,7 +27,7 @@ describe("future-takeover-program", () => {
   anchor.setProvider(provider);
   const connection = provider.connection;
   const wallet = provider.wallet as NodeWallet;
-  const program = new Program(IDL, "Az7xrYvsyP7M6vC955gEk5sCp4XkX1dCREh1TrP5b5wB" as Address, provider);
+  const program = new Program(IDL, "GEvvRk67iniRpyYgeptxJdSHm3JBiQB757WtUrRm4GAd" as Address, provider);
 
   // const tokenProgram = TOKEN_2022_PROGRAM_ID;
   const tokenProgram = TOKEN_PROGRAM_ID;
@@ -57,6 +57,8 @@ describe("future-takeover-program", () => {
   };
 
   // Accounts
+  const takeoverWallet = Keypair.generate().publicKey;
+
   const [admin, user, oldMint, newMint] = Array.from({ length: 4 }, () =>
     Keypair.generate()
   );
@@ -102,8 +104,6 @@ describe("future-takeover-program", () => {
     metaplexTokenProgram
   )[0];
 
-
-
   it("Airdrop and create mints", async () => {
     let lamports = await getMinimumBalanceForRentExemptMint(connection);
     let tx = new Transaction();
@@ -128,9 +128,9 @@ describe("future-takeover-program", () => {
         { mint: oldMint.publicKey, authority: user.publicKey, ata: userOldMintToken },
       ]
       .flatMap((x) => [
-        createInitializeMint2Instruction(x.mint, 6, x.authority, null, tokenProgram),
+        createInitializeMint2Instruction(x.mint, 9, x.authority, null, tokenProgram),
         createAssociatedTokenAccountIdempotentInstruction(provider.publicKey, x.ata, x.authority, x.mint, tokenProgram),
-        createMintToInstruction(x.mint, x.ata, x.authority, 1e9, undefined, tokenProgram),
+        createMintToInstruction(x.mint, x.ata, x.authority, 420_000_000 * 1e9, undefined, tokenProgram),
       ])
     ];
 
@@ -143,7 +143,7 @@ describe("future-takeover-program", () => {
     await program.methods
       .adminInit("LEO")
       .accounts({
-        admin: wallet.publicKey,
+        owner: wallet.publicKey,
         newAdmin: admin.publicKey,
         adminProfile,
         systemProgram: SystemProgram.programId,
@@ -156,7 +156,7 @@ describe("future-takeover-program", () => {
     await program.methods
       .adminDelete()
       .accounts({
-        admin: wallet.publicKey,
+        owner: wallet.publicKey,
         oldAdmin: admin.publicKey,
         adminProfile,
         systemProgram: SystemProgram.programId,
@@ -169,7 +169,7 @@ describe("future-takeover-program", () => {
     await program.methods
       .adminInit("LEO")
       .accounts({
-        admin: wallet.publicKey,
+        owner: wallet.publicKey,
         newAdmin: admin.publicKey,
         adminProfile,
         systemProgram: SystemProgram.programId,
@@ -191,6 +191,11 @@ describe("future-takeover-program", () => {
       takeoverWallet: Keypair.generate().publicKey,
       presalePrice: new BN(1e5),
       fdmc: 0,
+      presaleInflation: 100,
+      treasuryInflation: 100,
+      presaleInfation: 100,
+      referral: null,
+      referralSplit: null,
     }
 
     await program.methods
@@ -250,19 +255,25 @@ describe("future-takeover-program", () => {
   });
 
   it("Creates a New Takeover", async () => {
-    try {
       const takeoverArgs = {
         name: "Future",
         symbol: "FUT",
         uri: "uri",
         start: new BN(currentTimestamp),
         end: new BN(currentTimestamp + 60),
-        takeoverWallet: Keypair.generate().publicKey,
+        takeoverWallet,
         presalePrice: new BN(1),
         fdmc: 0,
+        presaleInflation: 100,
+        treasuryInflation: 100,
+        presaleInfation: 100,
+        referral: Keypair.generate().publicKey,
+        referralSplit: 500,
       }
 
-      await program.methods
+      let tx = new Transaction
+
+      tx.add( await program.methods
         .createTakeover(takeoverArgs)
         .accounts({
           admin: admin.publicKey,
@@ -277,11 +288,10 @@ describe("future-takeover-program", () => {
           metaplexTokenProgram,
           associatedTokenProgram
         })
-        .signers([admin, newMint])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
+        .instruction()
+      );
+
+      await provider.sendAndConfirm(tx, [admin, newMint], {skipPreflight: true}).then(confirm).then(log);
   });
 
   it("Swap Old Token", async () => {
@@ -407,6 +417,35 @@ describe("future-takeover-program", () => {
     } catch (error) {
       console.log(error);
     }
+  });
+
+  const rewardWallet = Keypair.generate().publicKey;
+  const newMintTakeoverWalletToken = getAssociatedTokenAddressSync(newMint.publicKey, takeoverWallet, false, tokenProgram);
+  const newMintRewardWalletToken = getAssociatedTokenAddressSync(newMint.publicKey, rewardWallet, false, tokenProgram);
+  const newMintTakeoverVault = getAssociatedTokenAddressSync(newMint.publicKey, takeover, true, tokenProgram);
+
+  it("Cleanup", async () => {
+    await program.methods
+      .cleanup()
+      .accounts({
+        admin: wallet.publicKey,
+        adminProfile,
+        newMint: newMint.publicKey,
+        takeoverWallet,
+        rewardWallet: Keypair.generate().publicKey,
+        referralWallet: null,
+        newMintRewardWalletToken,
+        newMintReferralWalletToken: null,
+        newMintTakeoverWalletToken,
+        takeover,
+        newMintTakeoverVault,
+        takeoverVault,
+        systemProgram,
+        tokenProgram,
+        associatedTokenProgram,
+      })
+      .signers([wallet.payer])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
   });
 
 

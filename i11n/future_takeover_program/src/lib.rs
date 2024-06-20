@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5");
+declare_id!("DWF1qAyiiKbSsuRSBBnJmQF6ePkCbtWsks8YwXVrPCcN");
 
 // Accounts
 #[derive(Accounts)]

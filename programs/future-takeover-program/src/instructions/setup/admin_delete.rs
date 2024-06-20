@@ -39,7 +39,7 @@ impl<'info> AdminDelete<'info> {
 
 pub fn handler(ctx: Context<AdminDelete>) -> Result<()> {
     // Make sure it's the admin of the protocol that is closing the old admin
-    //require!(ctx.accounts.owner.key() == ADMIN::id(), TakeoverError::Unauthorized);
+    require!(ctx.accounts.owner.key() == ADMIN::id(), TakeoverError::Unauthorized);
 
     Ok(())
 }

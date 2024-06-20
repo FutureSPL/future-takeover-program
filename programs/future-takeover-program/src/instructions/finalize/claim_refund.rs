@@ -118,10 +118,10 @@ impl<'info> ClaimRefund<'info> {
 
 pub fn handler(ctx: Context<ClaimRefund>) -> Result<()> {
     // Check if it's the right phase
-    // match ctx.accounts.takeover.phase {
-    //     FailedTakeover => (),
-    //     _ => return Err(TakeoverError::InvalidPhase.into()),
-    // }
+    match ctx.accounts.takeover.phase {
+        FailedTakeover => (),
+        _ => return Err(TakeoverError::InvalidPhase.into()),
+    }
 
     // Verify if there is a swap receipt account and if there is, refund the presale
     let info = ctx.accounts.swap_receipt.to_account_info();

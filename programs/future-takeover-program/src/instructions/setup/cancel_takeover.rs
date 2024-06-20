@@ -91,7 +91,6 @@ pub fn handler(ctx: Context<CancelTakeover>) -> Result<()> {
     // Check if the takeover has not started yet
     require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp, TakeoverError::TakeoverAlreadyStarted);
 
-
     // Empty and burn the takeover vault amount
     ctx.accounts.empty_and_burn_takeover_vault()?;
 

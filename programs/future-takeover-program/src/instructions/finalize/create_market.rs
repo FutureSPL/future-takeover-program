@@ -17,12 +17,9 @@ use anchor_spl::{
     token::{ transfer as spl_transfer, Transfer as SplTransfer, Mint, Token, TokenAccount }
 };
 
-use whirlpool_sdk::i11n::IncreaseLiquidityI11n;
+// use whirlpool_sdk::i11n::IncreaseLiquidityI11n;
 
-use crate::{
-    state::{ Takeover, AdminProfile, Phase::*},
-    errors::TakeoverError,
-};
+use crate::{state::{ Takeover, AdminProfile, Phase::*}, errors::TakeoverError};
 
 #[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct CreateMarketArgs {
@@ -125,29 +122,32 @@ impl<'info> CreateMarket<'info> {
         Ok(())
     }
 
-    fn introspect_market(&mut self, wsol_amount: u64, new_token_amount: u64, increase_liquidity_ix: Instruction) -> Result<()> {
+    // fn introspect_market(&mut self, wsol_amount: u64, new_token_amount: u64, increase_liquidity_ix: Instruction) -> Result<()> {
 
-        // Checking that this is the right Swap Instruction
-        let instruction = IncreaseLiquidityI11n::try_from(&increase_liquidity_ix).unwrap();
+    //     // Checking that this is the right Swap Instruction
+    //     let instruction = IncreaseLiquidityI11n::try_from(&increase_liquidity_ix).unwrap();
 
-        // Checking the Args like the amount
-        require_eq!(instruction.args.token_max_a, wsol_amount, TakeoverError::WrongAmountTokenA);
-        require_eq!(instruction.args.token_max_b, new_token_amount, TakeoverError::WrongAmountTokenB);
+    //     // Checking the Args like the amount
+    //     require_eq!(instruction.args.token_max_a, wsol_amount, TakeoverError::WrongAmountTokenA);
+    //     require_eq!(instruction.args.token_max_b, new_token_amount, TakeoverError::WrongAmountTokenB);
 
-        // Checking the Accounts like the ATAs
-        require_eq!(instruction.accounts.token_owner_account_a.pubkey, self.wsol_admin_token.key(), TakeoverError::WrongAtaTokenA);
-        require_eq!(instruction.accounts.token_owner_account_b.pubkey, self.new_mint_admin_token.key(), TakeoverError::WrongAtaTokenB);
+    //     // Checking the Accounts like the ATAs
+    //     require_eq!(instruction.accounts.token_owner_account_a.pubkey, self.wsol_admin_token.key(), TakeoverError::WrongAtaTokenA);
+    //     require_eq!(instruction.accounts.token_owner_account_b.pubkey, self.new_mint_admin_token.key(), TakeoverError::WrongAtaTokenB);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
 
 pub fn handler(ctx: Context<CreateMarket>, args: CreateMarketArgs) -> Result<()> {
     // Check if it's the right phase
-    // match ctx.accounts.takeover.phase {
-    //     MarketCreation => (),
-    //     _ => return Err(TakeoverError::InvalidPhase.into()),
-    // }
+    match ctx.accounts.takeover.phase {
+        MarketCreation => (),
+        _ => return Err(TakeoverError::InvalidPhase.into()),
+    }
+
+    // Change the Phase
+    ctx.accounts.takeover.phase = RewardDistribution;
 
     // Check if the amount requested is valid
     require!(args.new_mint_input > 0 && args.wsol_input > 0, TakeoverError::InvalidAmount);

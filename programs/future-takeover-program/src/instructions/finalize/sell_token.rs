@@ -16,7 +16,7 @@ use anchor_spl::{
     token::{ transfer, Transfer, Mint, Token, TokenAccount }
 };
 
-use jupiter_sdk::i11n::SharedAccountsRouteI11n;
+use jupiter_sdk::i11n::RouteI11n;
 use future_takeover_program_sdk::i11n::FinalizeSellI11n;
 
 use crate::{
@@ -108,16 +108,15 @@ impl<'info> SellToken<'info> {
     fn introspect_swap(&mut self, amount: u64, swap_ix: Instruction) -> Result<()> {
 
         // Checking that this is the right Swap Instruction
-        let instruction = SharedAccountsRouteI11n::try_from(&swap_ix).unwrap();
+        let instruction = RouteI11n::try_from(&swap_ix).unwrap();
 
         // Checking the Args like: in_amount = amount
         require_eq!(instruction.args.in_amount, amount, TakeoverError::InvalidSwapAmount);
 
         // Checking the Accounts like: source Token and TokenAccount + destination Token and TokenAccount
-        require_eq!(instruction.accounts.source_mint.pubkey, self.old_mint.key(), TakeoverError::InvalidSwapSourceMint);
-        require_eq!(instruction.accounts.source_token_account.pubkey, self.old_mint_admin_token.key(), TakeoverError::InvalidSwapSourceTokenAccount);
+        require_eq!(instruction.accounts.user_source_token_account.pubkey, self.old_mint_admin_token.key(), TakeoverError::InvalidSwapSourceTokenAccount);
         require_eq!(instruction.accounts.destination_mint.pubkey, self.wsol.key(), TakeoverError::InvalidSwapDestinationMint);
-        require_eq!(instruction.accounts.destination_token_account.pubkey, self.wsol_admin_token.key(), TakeoverError::InvalidSwapDestinationTokenAccount);
+        require_eq!(instruction.accounts.user_destination_token_account.pubkey, self.wsol_admin_token.key(), TakeoverError::InvalidSwapDestinationTokenAccount);
 
         Ok(())
     }

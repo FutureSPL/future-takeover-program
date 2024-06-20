@@ -81,6 +81,13 @@ pub enum TakeoverError {
     #[msg("The Token B ATA used to create the market is not the same as what is expected.")]
     WrongAtaTokenB,
 
+    #[msg("The Takeover Wallet used is not the correct one.")]
+    InvalidTakeoverWallet,
+    #[msg("The Reward Wallet used is not the correct one.")]
+    InvalidRewardWallet,
+    #[msg("The Referral Wallet used is not the correct one.")]
+    InvalidReferralWallet,
+
     // General Errors
     #[msg("Overflow")]
     Overflow,
