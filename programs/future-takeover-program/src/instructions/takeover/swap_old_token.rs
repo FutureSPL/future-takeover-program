@@ -16,6 +16,7 @@ pub struct SwapOldToken<'info> {
     pub user: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [b"takeover", old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
@@ -89,13 +90,14 @@ pub fn handler(ctx: Context<SwapOldToken>) -> Result<()> {
     // Check if the amount is greater than 0
     require!(ctx.accounts.user_old_mint_token.amount > 0, TakeoverError::InvalidAmount);
 
+    // Update the token swapped amount
+    ctx.accounts.takeover.token_swapped = ctx.accounts.takeover.token_swapped.checked_add(ctx.accounts.user_old_mint_token.amount).ok_or(TakeoverError::Overflow)?;
+
     // Initialize the swap receipt
     ctx.accounts.initialize_swap_receipt(ctx.bumps.swap_receipt)?;
 
     // Deposit the old token
     ctx.accounts.deposit_old_token()?;
-
-    ctx.accounts.takeover.token_swapped = ctx.accounts.takeover.token_swapped.checked_add(ctx.accounts.user_old_mint_token.amount).ok_or(TakeoverError::Overflow)?;
 
     Ok(())
 }

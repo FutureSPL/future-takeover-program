@@ -14,8 +14,8 @@ future_takeover_program = "6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "devnet"
-wallet = "/Users/leo/.config/solana/id.json"
+cluster = "mainnet"
+wallet = "/Users/leo/.config/solana/mainnet.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

@@ -75,6 +75,10 @@ impl<'info> ClaimRefund<'info> {
             &[bump],
         ];
 
+        // Convert the amount to the non_decimals form
+        let decimals_factor = 10u64.checked_pow(self.new_mint.decimals as u32).ok_or(TakeoverError::Overflow)?;
+        let amount_not_in_decimals = amount.checked_div(decimals_factor).ok_or(TakeoverError::Overflow)?;
+
         system_program::transfer(
             CpiContext::new_with_signer(
                 self.system_program.to_account_info(), 
@@ -84,7 +88,7 @@ impl<'info> ClaimRefund<'info> {
                 },
             &[signer_seeds],
             ),
-            amount.checked_mul(self.takeover.presale_price).ok_or(TakeoverError::Overflow)?,
+            amount_not_in_decimals.checked_mul(self.takeover.presale_price).ok_or(TakeoverError::Overflow)?,        
         )?;
 
         Ok(())

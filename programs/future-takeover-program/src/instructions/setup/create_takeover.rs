@@ -225,7 +225,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         0 => {
             require!(
                 args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation < LOW_PRESALE_BASIS_POINT && args.treasury_inflation < LOW_TREASURY_BASIS_POINT && args.rewards_inflation < LOW_REWARDS_BASIS_POINT,
+                args.presale_inflation <= LOW_PRESALE_BASIS_POINT && args.treasury_inflation <= LOW_TREASURY_BASIS_POINT && args.rewards_inflation <= LOW_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {
@@ -239,7 +239,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         1 => {
             require!(
                 args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation < MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation < MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation < MEDIUM_REWARDS_BASIS_POINT,
+                args.presale_inflation <= MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation <= MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation <= MEDIUM_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {
@@ -253,7 +253,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         2 => {
             require!(
                 args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation < HIGH_PRESALE_BASIS_POINT && args.treasury_inflation < HIGH_TREASURY_BASIS_POINT && args.rewards_inflation < HIGH_REWARDS_BASIS_POINT,
+                args.presale_inflation <= HIGH_PRESALE_BASIS_POINT && args.treasury_inflation <= HIGH_TREASURY_BASIS_POINT && args.rewards_inflation <= HIGH_REWARDS_BASIS_POINT,
                 TakeoverError::InvalidInflationAmounts
             );
             inflation_amount = InflationAmount {

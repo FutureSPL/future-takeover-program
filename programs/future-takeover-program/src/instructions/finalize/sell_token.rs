@@ -135,10 +135,10 @@ impl<'info> SellToken<'info> {
 
 pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     // Check if it's the right phase
-    // match ctx.accounts.takeover.phase {
-    //     TokenSelling => (),
-    //     _ => return Err(TakeoverError::InvalidPhase.into()),
-    // }
+    match ctx.accounts.takeover.phase {
+        TokenSelling => (),
+        _ => return Err(TakeoverError::InvalidPhase.into()),
+    }
 
     // Check if the amount requested is valid
     require!(amount > 0, TakeoverError::InvalidAmount);
