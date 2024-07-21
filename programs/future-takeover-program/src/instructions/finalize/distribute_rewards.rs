@@ -109,6 +109,8 @@ pub fn handler(ctx: Context<DistributeRewards>) -> Result<()> {
     if ctx.accounts.takeover.referral.is_some() {
         require!(ctx.accounts.takeover.referral.unwrap().key() == ctx.accounts.referral_wallet.as_ref().unwrap().key(), TakeoverError::InvalidReferralWallet);
         ctx.accounts.transfer_referral_amount()?;
+    } else {
+        require!(ctx.accounts.takeover.referral.is_none(), TakeoverError::InvalidReferralWallet);
     }
 
     // Transfer the Rewards amount to the Reward Wallet

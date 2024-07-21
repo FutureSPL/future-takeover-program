@@ -55,7 +55,7 @@ pub struct FinalizeSellToken<'info> {
 }
 
 impl<'info> FinalizeSellToken<'info> {
-    fn cleanup(&mut self, amount: u64) -> Result<()> {
+    fn cleanup(&mut self) -> Result<()> {
         // Close wSOL account and send to the admin
         close_account(
             CpiContext::new(
@@ -66,18 +66,6 @@ impl<'info> FinalizeSellToken<'info> {
                     authority: self.admin.to_account_info(),
                 }
             )
-        )?;
-
-        // Send the SOL to the vault
-        transfer(
-            CpiContext::new(
-                self.system_program.to_account_info(),
-                Transfer {
-                    from: self.admin.to_account_info(),
-                    to: self.takeover_sol_vault.to_account_info(),
-                }
-            ),
-            amount
         )?;
 
         Ok(())
@@ -93,13 +81,8 @@ pub fn handler(ctx: Context<FinalizeSellToken>) -> Result<()> {
     let sell_token_ix = load_instruction_at_checked( current_index - 2, &ixs)?;
     let _sell_token_instruction_check = SellTokenI11n::try_from(&sell_token_ix).unwrap();
 
-    // Load the Swap Instruction and grap the Sol Amount
-    let swap_ix = load_instruction_at_checked( current_index - 1, &ixs)?;
-    let swap_instruction = RouteI11n::try_from(&swap_ix).unwrap();
-    let swapped_amount = swap_instruction.args.quoted_out_amount;
-
     // Close the wSol Account and send it to the vault
-    ctx.accounts.cleanup(swapped_amount)?;
+    ctx.accounts.cleanup()?;
 
     Ok(())
 }
