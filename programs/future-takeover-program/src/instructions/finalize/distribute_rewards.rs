@@ -2,10 +2,14 @@ use anchor_lang::prelude::*;
 
 use anchor_spl::{
     associated_token::AssociatedToken, 
-    token::{ transfer as spl_transfer, Transfer as SplTransfer, Mint, Token, TokenAccount }
+    token_interface::{ transfer_checked as spl_transfer, TransferChecked as SplTransfer, Mint, TokenInterface, TokenAccount }
 };
 
-use crate::{state::{ Takeover, AdminProfile, Phase::*}, errors::TakeoverError, constant::reward_wallet};
+use crate::{
+    state::{ Takeover, AdminProfile, Phase::*}, 
+    errors::TakeoverError, 
+    constant::reward_wallet
+};
 
 #[derive(Accounts)]
 pub struct DistributeRewards<'info> {
@@ -17,7 +21,7 @@ pub struct DistributeRewards<'info> {
     )]
     pub admin_profile: Box<Account<'info, AdminProfile>>,
 
-    pub new_mint: Box<Account<'info, Mint>>,
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     pub reward_wallet: SystemAccount<'info>,
     pub referral_wallet: Option<SystemAccount<'info>>,
     #[account(
@@ -26,14 +30,14 @@ pub struct DistributeRewards<'info> {
         associated_token::mint = new_mint,
         associated_token::authority = reward_wallet,
     )]
-    pub new_mint_reward_wallet_token: Box<Account<'info, TokenAccount>>,
+    pub new_mint_reward_wallet_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = new_mint,
         associated_token::authority = referral_wallet,
     )]
-    pub new_mint_referral_wallet_token: Option<Account<'info, TokenAccount>>,
+    pub new_mint_referral_wallet_token: Option<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
@@ -45,10 +49,10 @@ pub struct DistributeRewards<'info> {
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
     )]
-    pub new_mint_takeover_vault: Box<Account<'info, TokenAccount>>,
+    pub new_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
@@ -56,17 +60,20 @@ impl<'info> DistributeRewards<'info> {
     pub fn transfer_referral_amount(&self) -> Result<()> {
         let old_mint_key = self.takeover.old_mint.key();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
+        
         spl_transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
                 SplTransfer {
                     from: self.new_mint_takeover_vault.to_account_info(),
+                    mint: self.new_mint.to_account_info(),
                     to: self.new_mint_referral_wallet_token.as_ref().unwrap().to_account_info(),
                     authority: self.takeover.to_account_info(),
                 },
                 &[signer_seeds],
             ),
             self.takeover.inflation_amount.referral_amount,
+            self.new_mint.decimals
         )?;
 
         Ok(())
@@ -75,17 +82,20 @@ impl<'info> DistributeRewards<'info> {
     pub fn transfer_reward_amount(&self) -> Result<()> {
         let old_mint_key = self.takeover.old_mint.key();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
+        
         spl_transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
                 SplTransfer {
                     from: self.new_mint_takeover_vault.to_account_info(),
+                    mint: self.new_mint.to_account_info(),
                     to: self.new_mint_reward_wallet_token.to_account_info(),
                     authority: self.takeover.to_account_info(),
                 },
                 &[signer_seeds],
             ),
             self.takeover.inflation_amount.rewards_amount,
+            self.new_mint.decimals
         )?;
 
         Ok(())

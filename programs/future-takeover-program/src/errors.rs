@@ -16,6 +16,10 @@ pub enum TakeoverError {
     TakeoverAlreadyStarted,
     #[msg("You used Invalid Inflation Amounts.")]
     InvalidInflationAmounts,
+    #[msg("You used Invalid Token Extension Args.")]
+    InvalidTokenExtensionArgs,
+    #[msg("You used Invalid Token Program.")]
+    InvalidTokenProgram,
 
     // Takeover Errors
     #[msg("You need to wait for the swap period to start")]

@@ -1,8 +1,7 @@
 use anchor_lang::prelude::*;
 
 use anchor_spl::{
-    associated_token::AssociatedToken, 
-    token::{ transfer, Mint, Token, TokenAccount, Transfer} 
+    associated_token::AssociatedToken, token_interface::{ transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked} 
 };
 
 use crate::{
@@ -22,7 +21,7 @@ pub struct SwapOldToken<'info> {
     )]
     pub takeover: Account<'info, Takeover>,
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = SwapReceipt::INIT_SPACE,
         seeds = [b"swap_receipt", takeover.key().as_ref(), user.key().as_ref()],
@@ -30,23 +29,23 @@ pub struct SwapOldToken<'info> {
     )]
     pub swap_receipt: Account<'info, SwapReceipt>,
 
-    pub old_mint: Account<'info, Mint>,
+    pub old_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = old_mint,
         associated_token::authority = user,
     )]
-    pub user_old_mint_token: Account<'info, TokenAccount>,
+    pub user_old_mint_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = user,
         associated_token::mint = old_mint,
         associated_token::authority = takeover,
     )]
-    pub takeover_old_mint_vault: Account<'info, TokenAccount>,
+    pub takeover_old_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
@@ -66,16 +65,18 @@ impl<'info> SwapOldToken<'info> {
     
     fn deposit_old_token(&mut self) -> Result<()> {
         // Transfer the old tokens from the user to the takeover vault
-        transfer(
+        transfer_checked(
             CpiContext::new(
                 self.token_program.to_account_info(),
-                Transfer {
+                TransferChecked {
                     from: self.user_old_mint_token.to_account_info(),
+                    mint: self.old_mint.to_account_info(),
                     to: self.takeover_old_mint_vault.to_account_info(),
                     authority: self.user.to_account_info(),
                 },
             ),
             self.user_old_mint_token.amount,
+            self.old_mint.decimals,
         )?;
 
         Ok(())

@@ -12,10 +12,3 @@ pub use update_takeover::*;
 
 pub mod cancel_takeover;
 pub use cancel_takeover::*;
-
-// Not in V1 Scope
-// pub mod claim_presale;
-// pub use claim_presale::*;
-
-// pub mod create_t22_takeover;
-// pub use create_t22_takeover::*;

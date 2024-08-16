@@ -13,7 +13,7 @@ use anchor_lang::{
 
 use anchor_spl::{
     associated_token::AssociatedToken, 
-    token::{ transfer, Transfer, Mint, Token, TokenAccount }
+    token_interface::{ transfer_checked, TransferChecked, Mint, TokenInterface, TokenAccount }
 };
 
 use jupiter_sdk::i11n::RouteI11n;
@@ -34,23 +34,23 @@ pub struct SellToken<'info> {
     )]
     pub admin_profile: Account<'info, AdminProfile>,
 
-    pub old_mint: Box<Account<'info, Mint>>,
+    pub old_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account( address = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap())]
-    pub wsol: Account<'info, Mint>,
+    pub wsol: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = old_mint,
         associated_token::authority = admin,
     )]
-    pub old_mint_admin_token: Box<Account<'info, TokenAccount>>,
+    pub old_mint_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = admin,
         associated_token::mint = wsol,
         associated_token::authority = admin,
     )]
-    pub wsol_admin_token: Box<Account<'info, TokenAccount>>,
+    pub wsol_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover", old_mint.key().as_ref()],
@@ -63,7 +63,7 @@ pub struct SellToken<'info> {
         associated_token::mint = old_mint,
         associated_token::authority = takeover,
     )]
-    pub old_mint_takeover_vault: Box<Account<'info, TokenAccount>>,
+    pub old_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         seeds = [b"takeover_vault", takeover.key().as_ref()],
@@ -72,7 +72,7 @@ pub struct SellToken<'info> {
     pub takeover_sol_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     /// CHECK: InstructionsSysvar account
     #[account(address = sysvar::instructions::ID)]
@@ -83,23 +83,21 @@ impl<'info> SellToken<'info> {
     fn receieve_old_token(&mut self, amount: u64) -> Result<()> {
         // Transfer the old tokens from the vault to the user
         let old_mint = self.takeover.old_mint.key().clone();
-        let signer_seeds = &[
-            b"takeover",
-            old_mint.as_ref(),
-            &[self.takeover.bump],
-        ];
+        let signer_seeds = &[b"takeover", old_mint.as_ref(), &[self.takeover.bump]];
 
-        transfer(
+        transfer_checked(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
-                Transfer {
+                TransferChecked {
                     from: self.old_mint_takeover_vault.to_account_info(),
+                    mint: self.old_mint.to_account_info(),
                     to: self.old_mint_admin_token.to_account_info(),
                     authority: self.takeover.to_account_info(),
                 },
                 &[signer_seeds],
             ),
             amount,
+            self.old_mint.decimals
         )?;
 
         Ok(())

@@ -76,6 +76,10 @@ pub mod future_takeover_program {
         instructions::claim_tokens::handler(ctx)
     }
 
+    pub fn claim_remaining_tokens(ctx: Context<ClaimRemainingTokens>) -> Result<()> {
+        instructions::claim_remaining_tokens::handler(ctx)
+    }
+
     // - Failed Takeover    
     pub fn claim_refund(ctx: Context<ClaimRefund>) -> Result<()> {
         instructions::claim_refund::handler(ctx)

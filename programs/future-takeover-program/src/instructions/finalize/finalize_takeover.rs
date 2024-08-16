@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::Mint;
 
 use crate::{
     errors::TakeoverError, 
@@ -16,21 +15,12 @@ pub struct FinalizeTakeover<'info> {
         bump = admin_profile.bump,
     )]
     pub admin_profile: Account<'info, AdminProfile>,
-    
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
-        has_one = new_mint,
-        has_one = old_mint,
     )]
     pub takeover: Account<'info, Takeover>,
-
-    #[account(mut)]
-    pub old_mint: Account<'info, Mint>,
-    #[account(mut)]
-    pub new_mint: Account<'info, Mint>,    
-
     pub system_program: Program<'info, System>,
 }
 

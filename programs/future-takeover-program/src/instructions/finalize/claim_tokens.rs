@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{ transfer, Transfer, Mint, Token, TokenAccount}
+    token_interface::{ transfer_checked, TransferChecked, Mint, TokenInterface, TokenAccount}
 };
 
 use crate::{
@@ -37,23 +37,23 @@ pub struct ClaimTokens<'info> {
     pub swap_receipt: UncheckedAccount<'info>,
 
     #[account(mut)]
-    pub new_mint: Account<'info, Mint>,
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
     )]
-    pub takeover_new_mint_vault: Account<'info, TokenAccount>,
+    pub takeover_new_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = user,
     )]
-    pub user_new_mint_token: Account<'info, TokenAccount>,
+    pub user_new_mint_token: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
 }
 
 impl<'info> ClaimTokens<'info> {
@@ -66,17 +66,19 @@ impl<'info> ClaimTokens<'info> {
             &[self.takeover.bump],
         ];
 
-        transfer(
+        transfer_checked(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
-                Transfer {
+                TransferChecked {
                     from: self.takeover_new_mint_vault.to_account_info(),
+                    mint: self.new_mint.to_account_info(),
                     to: self.user_new_mint_token.to_account_info(),
                     authority: self.takeover.to_account_info(),
                 },
                 &[signer_seeds],
             ),
-            amount
+            amount,
+            self.new_mint.decimals,
         )?;
         
         Ok(())

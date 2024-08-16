@@ -1,13 +1,11 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{prelude::*, solana_program::program::invoke, system_program::{create_account, CreateAccount}};
 
 use anchor_spl::{
     associated_token::AssociatedToken, 
-    metadata::{
-        mpl_token_metadata::{
-            instructions::{CreateV1Cpi, CreateV1CpiAccounts, CreateV1InstructionArgs},
-            types::TokenStandard::Fungible,
-        }, Metadata
-    }, token::{ Mint, Token, TokenAccount, mint_to, MintTo, set_authority, SetAuthority} 
+    metadata::{mpl_token_metadata::instructions::CreateV1CpiBuilder, Metadata}, 
+    token_2022::spl_token_2022::{extension::ExtensionType, instruction::{AuthorityType, initialize_permanent_delegate, initialize_mint_close_authority}, extension, state::Mint as SplToken22Mint, ID as TOKEN_2022_ID},
+    token::ID as TOKEN_ID, 
+    token_interface::{mint_to, set_authority, Mint, MintTo, SetAuthority, TokenAccount, TokenInterface}
 };
 
 use crate::{
@@ -31,7 +29,40 @@ pub struct CreateTakeoverArgs {
     pub rewards_inflation: u16,
     pub referral: Option<Pubkey>,
     pub referral_split: Option<u16>,
+    pub token_extension: Option<TokenExtensionArgs>,
 }
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct TokenExtensionArgs {
+    pub transfer_fee: Option<TransferFeeArgs>,
+    pub interest_bearing: Option<InterestBearingArgs>,
+    pub permanent_delegate: Option<PermanentDelegateArgs>,
+    pub close_mint: Option<CloseMintAuth>,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct TransferFeeArgs {
+    pub fee_authority: Pubkey,
+    pub transfer_fee_basis_points: u16,
+    pub maximum_fee: u64,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct InterestBearingArgs {
+    pub rate_authority: Pubkey,
+    pub rate: i16,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct PermanentDelegateArgs {
+    pub delegate_authority: Pubkey,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize)]
+pub struct CloseMintAuth {
+    pub close_mint_authority: Pubkey,
+}
+
 
 #[derive(Accounts)]
 pub struct CreateTakeover<'info> {
@@ -52,30 +83,26 @@ pub struct CreateTakeover<'info> {
     )]
     pub takeover: Box<Account<'info, Takeover>>,
     
-    pub old_mint: Box<Account<'info, Mint>>,
-    #[account(
-        init,
-        payer = admin,
-        mint::decimals = old_mint.decimals,
-        mint::authority = admin,
-    )]
-    pub new_mint: Box<Account<'info, Mint>>,
+    pub old_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut)]
+    pub new_mint: Signer<'info>,
     #[account(mut)]
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
     pub metadata: AccountInfo<'info>,
     #[account(
         init,
         payer = admin,
-        associated_token::mint = new_mint,
-        associated_token::authority = takeover,
+        token::mint = new_mint,
+        token::authority = takeover,
     )]
-    pub takeover_new_mint_vault: Box<Account<'info, TokenAccount>>,
+    pub takeover_new_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
     pub sysvar_instruction_program: AccountInfo<'info>,
     pub metaplex_token_program: Program<'info, Metadata>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
+    pub rent: Sysvar<'info, Rent>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
@@ -100,9 +127,12 @@ impl<'info> CreateTakeover<'info> {
 
         // Mint the new supply + the inflation amount to the takeover vault
         let amount = self.old_mint.supply
-            .checked_add(inflation_amount.presale_amount.clone()).ok_or(TakeoverError::Overflow)?
-            .checked_add(inflation_amount.treasury_amount.clone()).ok_or(TakeoverError::Overflow)?
-            .checked_add(inflation_amount.rewards_amount.clone()).ok_or(TakeoverError::Overflow)?;
+            .checked_add(inflation_amount.presale_amount.clone())
+            .ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.treasury_amount.clone())
+            .ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.rewards_amount.clone())
+            .ok_or(TakeoverError::Overflow)?;
 
         mint_to(
             CpiContext::new(
@@ -119,52 +149,168 @@ impl<'info> CreateTakeover<'info> {
         Ok(())
     }
 
-    fn intialize_new_mint(&self, name: String, symbol: String, uri: String) -> Result<()> {
-        let metaplex_program = &self.metaplex_token_program.to_account_info();
-        let metadata = &self.metadata.to_account_info();
-        let master_edition = None;
-        let mint = (&self.new_mint.to_account_info(), false);
-        let authority = &self.admin.to_account_info();
-        let payer = &self.admin.to_account_info();
-        let update_authority = (&self.admin.to_account_info(), false);
-        let system_program = &self.system_program.to_account_info();
-        let sysvar_instructions = &self.sysvar_instruction_program.to_account_info();
-        let spl_token_program = &self.token_program.to_account_info();
+    fn intialize_new_native_mint(&self, name: String, symbol: String, uri: String) -> Result<()> {
 
-        let accounts = CreateV1CpiAccounts {
-            metadata,
-            mint,
-            payer,
-            authority,
-            update_authority,
-            system_program,
-            sysvar_instructions,
-            spl_token_program: spl_token_program,
-            master_edition,
-        };
+        let rent = &Rent::from_account_info(&self.rent.to_account_info())?;
+        let space = anchor_spl::token::Mint::LEN;
+        let lamports = rent.minimum_balance(space);
 
-        let args = CreateV1InstructionArgs {
-            name,
-            symbol,
-            uri,
-            seller_fee_basis_points: 0,
-            creators: None,
-            primary_sale_happened: false,
-            is_mutable: false,
-            token_standard: Fungible,
-            collection: None,
-            uses: None,
-            collection_details: None,
-            rule_set: None,
-            decimals: None,
-            print_supply: None,
-        };
+        create_account(
+        CpiContext::new(
+                self.token_program.to_account_info(),
+                CreateAccount {
+                    from: self.admin.to_account_info(),
+                    to: self.new_mint.to_account_info(),
+                }
+            ),
+            lamports,
+            space as u64,
+            &self.token_program.key(),
+        )?;
 
-        CreateV1Cpi::new(
-            metaplex_program,
-            accounts,
-            args,
-        ).invoke()?;
+        anchor_spl::token::initialize_mint2(
+            CpiContext::new(
+                self.token_program.to_account_info(),
+                anchor_spl::token::InitializeMint2 {
+                    mint: self.new_mint.to_account_info(),
+                },                
+            ),
+            self.old_mint.decimals,
+            &self.admin.key(),
+            None,
+        )?;
+
+        CreateV1CpiBuilder::new(&self.metaplex_token_program.to_account_info())
+            .metadata(&self.metadata.to_account_info())
+            .mint(&self.new_mint.to_account_info(), true)
+            .authority(&self.admin.to_account_info())
+            .payer(&self.admin.to_account_info())
+            .update_authority(&self.admin.to_account_info(), true)
+            .system_program(&self.system_program.to_account_info())
+            .sysvar_instructions(&self.sysvar_instruction_program.to_account_info())
+            .spl_token_program(Some(&self.token_program.to_account_info()))
+            .name(name)
+            .symbol(symbol)
+            .uri(uri)
+            .seller_fee_basis_points(0)
+            .invoke()?;
+
+        Ok(())
+    }
+
+    fn initialize_new_extension_mint(&self, name: String, symbol: String, uri: String, token_extension: TokenExtensionArgs) -> Result<()> {
+
+        let mut extension_type: Vec<ExtensionType> = vec![];
+        
+        if token_extension.close_mint.is_some() {
+            extension_type.push(ExtensionType::MintCloseAuthority);
+        }
+
+        if token_extension.interest_bearing.is_some() {
+            extension_type.push(ExtensionType::InterestBearingConfig);
+        }
+
+        if token_extension.permanent_delegate.is_some() {
+            extension_type.push(ExtensionType::PermanentDelegate);
+        }
+
+        if token_extension.transfer_fee.is_some() {
+            extension_type.push(ExtensionType::TransferFeeConfig);
+        }
+
+        let size = ExtensionType::try_calculate_account_len::<SplToken22Mint>(&extension_type).unwrap();
+        let lamports = self.rent.minimum_balance(size);
+
+        create_account(
+        CpiContext::new(
+                self.token_program.to_account_info(),
+                CreateAccount {
+                    from: self.admin.to_account_info(),
+                    to: self.new_mint.to_account_info(),
+                }
+            ),
+            lamports,
+            (size).try_into().unwrap(),
+            &self.token_program.key(),
+        )?;
+
+        if let Some(close_mint) = &token_extension.close_mint {
+            invoke(
+                &initialize_mint_close_authority(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    Some(&close_mint.close_mint_authority),
+                )?,
+                &vec![
+                    self.new_mint.to_account_info(),
+                ],
+            )?;
+        }
+
+        if let Some(interest_bearing) = &token_extension.interest_bearing {
+            invoke(
+                &extension::interest_bearing_mint::instruction::initialize(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    Some(interest_bearing.rate_authority),
+                    interest_bearing.rate,
+                )?,
+                &vec![self.new_mint.to_account_info()],
+            )?;
+        }
+
+        if let Some(permanent_delegate) = &token_extension.permanent_delegate {
+            invoke(
+                &initialize_permanent_delegate(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    &permanent_delegate.delegate_authority,
+                )?,
+                &vec![
+                    self.new_mint.to_account_info(),
+                ],
+            )?;
+        }
+
+        if let Some(transfer_fee) = &token_extension.transfer_fee {
+            invoke(
+                &extension::transfer_fee::instruction::initialize_transfer_fee_config(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    Some(&transfer_fee.fee_authority),
+                    Some(&transfer_fee.fee_authority),
+                    transfer_fee.transfer_fee_basis_points,
+                    transfer_fee.maximum_fee,
+                )?,
+                &vec![self.new_mint.to_account_info()],
+            )?;
+        }
+
+        anchor_spl::token_2022::initialize_mint2(
+            CpiContext::new(
+                self.token_program.to_account_info(),
+                anchor_spl::token_2022::InitializeMint2 {
+                    mint: self.new_mint.to_account_info(),
+                },                
+            ),
+            self.old_mint.decimals,
+            &self.admin.key(),
+            None,
+        )?;
+
+        CreateV1CpiBuilder::new(&self.metaplex_token_program.to_account_info())
+            .metadata(&self.metadata.to_account_info())
+            .mint(&self.new_mint.to_account_info(), true)
+            .authority(&self.admin.to_account_info())
+            .payer(&self.admin.to_account_info())
+            .update_authority(&self.admin.to_account_info(), true)
+            .system_program(&self.system_program.to_account_info())
+            .sysvar_instructions(&self.sysvar_instruction_program.to_account_info())
+            .name(name)
+            .symbol(symbol)
+            .uri(uri)
+            .seller_fee_basis_points(0)
+            .invoke()?;
 
         Ok(())
     }
@@ -178,7 +324,7 @@ impl<'info> CreateTakeover<'info> {
                     current_authority: self.admin.to_account_info(),
                 }
             ),
-            anchor_spl::token::spl_token::instruction::AuthorityType::MintTokens,
+            AuthorityType::MintTokens,
             None,
         )?;
 
@@ -200,25 +346,47 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     // Set parameters for rewards, presale and treasury based on the FDMC
     let inflation_amount: InflationAmount;
 
-    let presale_amount: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
-        .checked_mul(args.presale_inflation as u64).ok_or(TakeoverError::Overflow)?;
+    let presale_amount: u64 = (
+        ctx.accounts.old_mint.supply
+            .checked_div(10000)
+            .ok_or(TakeoverError::Underflow)?
+    ).checked_mul(args.presale_inflation as u64)
+        .ok_or(TakeoverError::Overflow)?;
 
-    let treasury_amount: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
-        .checked_mul(args.treasury_inflation as u64).ok_or(TakeoverError::Overflow)?;
+    let treasury_amount: u64 = (
+        ctx.accounts.old_mint.supply
+            .checked_div(10000)
+            .ok_or(TakeoverError::Underflow)?
+    ).checked_mul(args.treasury_inflation as u64)
+        .ok_or(TakeoverError::Overflow)?;
 
     let rewards_amount: u64;
     let referral_amount: u64;
 
     if let Some(referral_split) = args.referral_split {
-        let tmp: u64 = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
-            .checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?;
-        referral_amount = tmp.checked_mul(referral_split as u64).ok_or(TakeoverError::Overflow)?
-            .checked_div(10000).ok_or(TakeoverError::Underflow)?;
-        rewards_amount = tmp.checked_sub(referral_amount).ok_or(TakeoverError::Underflow)?;
+        let tmp = (
+            ctx.accounts.old_mint.supply
+                .checked_div(10000)
+                .ok_or(TakeoverError::Underflow)?
+        ).checked_mul(args.rewards_inflation as u64)
+            .ok_or(TakeoverError::Overflow)?;
+
+        referral_amount = tmp.checked_mul(referral_split as u64)
+            .ok_or(TakeoverError::Overflow)?
+            .checked_div(10000)
+            .ok_or(TakeoverError::Underflow)?;
+
+        rewards_amount = tmp.checked_sub(referral_amount)
+            .ok_or(TakeoverError::Underflow)?;
     } else {
-        rewards_amount = (ctx.accounts.old_mint.supply.checked_div(10000).ok_or(TakeoverError::Underflow)?)
-            .checked_mul(args.rewards_inflation as u64).ok_or(TakeoverError::Overflow)?;
         referral_amount = 0;
+
+        rewards_amount = (
+            ctx.accounts.old_mint.supply
+                .checked_div(10000)
+                .ok_or(TakeoverError::Underflow)?
+        ).checked_mul(args.rewards_inflation as u64)
+            .ok_or(TakeoverError::Overflow)?;
     }
 
     match args.fdmc {
@@ -274,7 +442,17 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     ctx.accounts.initialize_takeover(inflation_amount, swap_period, args.takeover_wallet, args.presale_price, args.referral, bumps.takeover)?;
 
     // Initialize the new mint using Metaplex
-    ctx.accounts.intialize_new_mint(args.name, args.symbol, args.uri)?;
+    match ctx.accounts.token_program.key() {
+        TOKEN_2022_ID => {
+            require!(args.token_extension.is_some(), TakeoverError::InvalidTokenExtensionArgs);
+            ctx.accounts.initialize_new_extension_mint(args.name, args.symbol, args.uri, args.token_extension.unwrap())?;
+        },
+        TOKEN_ID => {
+            require!(args.token_extension.is_none(), TakeoverError::InvalidTokenExtensionArgs);
+            ctx.accounts.intialize_new_native_mint(args.name, args.symbol, args.uri)?;
+        },
+        _ => return Err(TakeoverError::InvalidTokenProgram.into()),
+    }
 
     // Remove the mint authority so nobody can mint more tokens
     ctx.accounts.remove_mint_authority()?;

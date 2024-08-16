@@ -2,7 +2,7 @@ use anchor_lang::{
     prelude::*,
     system_program::{transfer, Transfer}
 };
-use anchor_spl::token::Mint;
+use anchor_spl::token_interface::Mint;
 
 use crate::{
     state::{Takeover, PresaleReceipt},
@@ -21,7 +21,7 @@ pub struct BuyPresale<'info> {
     )]
     pub takeover: Account<'info, Takeover>,
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         space = PresaleReceipt::INIT_SPACE,
         seeds = [b"presale_receipt", takeover.key().as_ref(), user.key().as_ref()],
@@ -35,8 +35,7 @@ pub struct BuyPresale<'info> {
         bump,
     )]
     pub takeover_vault: SystemAccount<'info>,
-    pub new_mint: Account<'info, Mint>,
-
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     pub system_program: Program<'info, System>,
 }
 

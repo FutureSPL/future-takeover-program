@@ -21,3 +21,6 @@ pub use cleanup::*;
 
 pub mod distribute_rewards;
 pub use distribute_rewards::*;
+
+pub mod claim_remaining_tokens;
+pub use claim_remaining_tokens::*;

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{ Mint, Token, TokenAccount, burn, Burn, close_account, CloseAccount} 
+    token_interface::{ Mint, TokenInterface, TokenAccount, burn, Burn, close_account, CloseAccount} 
 };
 
 use crate::{
@@ -28,16 +28,16 @@ pub struct CancelTakeover<'info> {
     pub takeover: Account<'info, Takeover>,
 
     #[account(mut)]
-    pub new_mint: Account<'info, Mint>,
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
     )]
-    pub takeover_new_mint_vault: Account<'info, TokenAccount>,
+    pub takeover_new_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
