@@ -1,11 +1,9 @@
 use anchor_lang::{prelude::*, solana_program::program::invoke, system_program::{create_account, CreateAccount}};
 
 use anchor_spl::{
-    associated_token::AssociatedToken, 
-    metadata::{mpl_token_metadata::instructions::CreateV1CpiBuilder, Metadata}, 
-    token_2022::spl_token_2022::{extension::ExtensionType, instruction::{AuthorityType, initialize_permanent_delegate, initialize_mint_close_authority}, extension, state::Mint as SplToken22Mint, ID as TOKEN_2022_ID},
-    token::ID as TOKEN_ID, 
-    token_interface::{mint_to, set_authority, Mint, MintTo, SetAuthority, TokenAccount, TokenInterface}
+    associated_token::{create, get_associated_token_address_with_program_id, AssociatedToken, Create}, metadata::{mpl_token_metadata::instructions::CreateV1CpiBuilder, Metadata}, token::ID as TOKEN_ID, token_2022::spl_token_2022::{extension::{self, ExtensionType}, instruction::{initialize_mint_close_authority, initialize_permanent_delegate, AuthorityType}, state::Mint as SplToken22Mint, ID as TOKEN_2022_ID}, token_interface::{
+        mint_to, set_authority, spl_pod, spl_token_metadata_interface::{instruction::initialize, state::TokenMetadata}, Mint, MintTo, SetAuthority, TokenInterface 
+    }
 };
 
 use crate::{
@@ -32,37 +30,43 @@ pub struct CreateTakeoverArgs {
     pub token_extension: Option<TokenExtensionArgs>,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize)]
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
 pub struct TokenExtensionArgs {
     pub transfer_fee: Option<TransferFeeArgs>,
     pub interest_bearing: Option<InterestBearingArgs>,
     pub permanent_delegate: Option<PermanentDelegateArgs>,
-    pub close_mint: Option<CloseMintAuth>,
+    pub close_mint: Option<CloseMintArgs>,
+    pub transfer_hook: Option<TransferHookArgs>,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize)]
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
 pub struct TransferFeeArgs {
     pub fee_authority: Pubkey,
     pub transfer_fee_basis_points: u16,
     pub maximum_fee: u64,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize)]
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
 pub struct InterestBearingArgs {
     pub rate_authority: Pubkey,
     pub rate: i16,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize)]
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
 pub struct PermanentDelegateArgs {
     pub delegate_authority: Pubkey,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize)]
-pub struct CloseMintAuth {
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+pub struct CloseMintArgs {
     pub close_mint_authority: Pubkey,
 }
 
+#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+pub struct TransferHookArgs {
+    pub hook_authority: Pubkey,
+    pub hook_program_id: Pubkey,
+}
 
 #[derive(Accounts)]
 pub struct CreateTakeover<'info> {
@@ -88,14 +92,10 @@ pub struct CreateTakeover<'info> {
     pub new_mint: Signer<'info>,
     #[account(mut)]
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
-    pub metadata: AccountInfo<'info>,
-    #[account(
-        init,
-        payer = admin,
-        token::mint = new_mint,
-        token::authority = takeover,
-    )]
-    pub takeover_new_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub metadata: UncheckedAccount<'info>,
+    #[account(mut)]
+    /// CHECK: This will be checked by the create_mint instruction
+    pub takeover_new_mint_vault: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
@@ -124,27 +124,6 @@ impl<'info> CreateTakeover<'info> {
                 bump,
             }
         );
-
-        // Mint the new supply + the inflation amount to the takeover vault
-        let amount = self.old_mint.supply
-            .checked_add(inflation_amount.presale_amount.clone())
-            .ok_or(TakeoverError::Overflow)?
-            .checked_add(inflation_amount.treasury_amount.clone())
-            .ok_or(TakeoverError::Overflow)?
-            .checked_add(inflation_amount.rewards_amount.clone())
-            .ok_or(TakeoverError::Overflow)?;
-
-        mint_to(
-            CpiContext::new(
-                self.token_program.to_account_info(),
-                MintTo {
-                    mint: self.new_mint.to_account_info(),
-                    to: self.takeover_new_mint_vault.to_account_info(),
-                    authority: self.admin.to_account_info(),
-                }
-            ),
-            amount
-        )?;
 
         Ok(())
     }
@@ -195,12 +174,25 @@ impl<'info> CreateTakeover<'info> {
             .seller_fee_basis_points(0)
             .invoke()?;
 
+
+
         Ok(())
     }
 
     fn initialize_new_extension_mint(&self, name: String, symbol: String, uri: String, token_extension: TokenExtensionArgs) -> Result<()> {
 
         let mut extension_type: Vec<ExtensionType> = vec![];
+
+        extension_type.push(ExtensionType::MetadataPointer);
+
+        let metadata = TokenMetadata {
+            update_authority: spl_pod::optional_keys::OptionalNonZeroPubkey::try_from(None).unwrap(),
+            mint: self.new_mint.key(),
+            name,
+            symbol,
+            uri,
+            additional_metadata: vec![],
+        };
         
         if token_extension.close_mint.is_some() {
             extension_type.push(ExtensionType::MintCloseAuthority);
@@ -218,8 +210,13 @@ impl<'info> CreateTakeover<'info> {
             extension_type.push(ExtensionType::TransferFeeConfig);
         }
 
+        if token_extension.transfer_hook.is_some() {
+            extension_type.push(ExtensionType::TransferHook);
+        }
+
         let size = ExtensionType::try_calculate_account_len::<SplToken22Mint>(&extension_type).unwrap();
-        let lamports = self.rent.minimum_balance(size);
+        let extension_extra_space = metadata.tlv_size_of().unwrap();
+        let lamports = self.rent.minimum_balance(size + extension_extra_space);
 
         create_account(
         CpiContext::new(
@@ -234,7 +231,19 @@ impl<'info> CreateTakeover<'info> {
             &self.token_program.key(),
         )?;
 
-        if let Some(close_mint) = &token_extension.close_mint {
+        invoke(
+            &extension::metadata_pointer::instruction::initialize(
+                &self.token_program.key(),
+                &self.new_mint.key(),
+                None,
+                Some(self.new_mint.key()),
+            )?,
+            &vec![
+                self.new_mint.to_account_info(),
+            ],
+        )?;
+
+        if let Some(close_mint) = token_extension.close_mint {
             invoke(
                 &initialize_mint_close_authority(
                     &self.token_program.key(),
@@ -247,7 +256,7 @@ impl<'info> CreateTakeover<'info> {
             )?;
         }
 
-        if let Some(interest_bearing) = &token_extension.interest_bearing {
+        if let Some(interest_bearing) = token_extension.interest_bearing {
             invoke(
                 &extension::interest_bearing_mint::instruction::initialize(
                     &self.token_program.key(),
@@ -255,11 +264,13 @@ impl<'info> CreateTakeover<'info> {
                     Some(interest_bearing.rate_authority),
                     interest_bearing.rate,
                 )?,
-                &vec![self.new_mint.to_account_info()],
+                &vec![
+                    self.new_mint.to_account_info()
+                ],
             )?;
         }
 
-        if let Some(permanent_delegate) = &token_extension.permanent_delegate {
+        if let Some(permanent_delegate) = token_extension.permanent_delegate {
             invoke(
                 &initialize_permanent_delegate(
                     &self.token_program.key(),
@@ -272,7 +283,7 @@ impl<'info> CreateTakeover<'info> {
             )?;
         }
 
-        if let Some(transfer_fee) = &token_extension.transfer_fee {
+        if let Some(transfer_fee) = token_extension.transfer_fee {
             invoke(
                 &extension::transfer_fee::instruction::initialize_transfer_fee_config(
                     &self.token_program.key(),
@@ -281,6 +292,18 @@ impl<'info> CreateTakeover<'info> {
                     Some(&transfer_fee.fee_authority),
                     transfer_fee.transfer_fee_basis_points,
                     transfer_fee.maximum_fee,
+                )?,
+                &vec![self.new_mint.to_account_info()],
+            )?;
+        }
+
+        if let Some(transfer_hook) = token_extension.transfer_hook {
+            invoke(
+                &extension::transfer_hook::instruction::initialize(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    Some(transfer_hook.hook_authority),
+                    Some(transfer_hook.hook_program_id),
                 )?,
                 &vec![self.new_mint.to_account_info()],
             )?;
@@ -298,24 +321,76 @@ impl<'info> CreateTakeover<'info> {
             None,
         )?;
 
-        CreateV1CpiBuilder::new(&self.metaplex_token_program.to_account_info())
-            .metadata(&self.metadata.to_account_info())
-            .mint(&self.new_mint.to_account_info(), true)
-            .authority(&self.admin.to_account_info())
-            .payer(&self.admin.to_account_info())
-            .update_authority(&self.admin.to_account_info(), true)
-            .system_program(&self.system_program.to_account_info())
-            .sysvar_instructions(&self.sysvar_instruction_program.to_account_info())
-            .name(name)
-            .symbol(symbol)
-            .uri(uri)
-            .seller_fee_basis_points(0)
-            .invoke()?;
+        invoke(
+            &initialize(
+                &self.token_program.key(),
+                &self.new_mint.key(),
+                &self.new_mint.key(),
+                &self.new_mint.key(),
+                &self.admin.key(),
+                metadata.name,
+                metadata.symbol,
+                metadata.uri,
+            ),
+            &vec![
+                self.new_mint.to_account_info(),
+                self.admin.to_account_info(),
+            ],
+        )?;
 
         Ok(())
     }
 
-    pub fn remove_mint_authority(&self) -> Result<()> {
+    fn operate_on_new_mint(&self, inflation_amount: InflationAmount) -> Result<()> {
+
+        // Check if the takeover_new_mint_vault is the associated token account of the takeover wallet
+        require_eq!(
+            self.takeover_new_mint_vault.key(), 
+            get_associated_token_address_with_program_id(
+                &self.takeover.key(), 
+                &self.new_mint.key(),
+                &self.token_program.key()
+            ), 
+            TakeoverError::InvalidAssociatedToken
+        );
+
+        // Create the Takeover ATA
+        create(
+            CpiContext::new(
+                self.token_program.to_account_info(),
+                Create {
+                    payer: self.admin.to_account_info(),
+                    associated_token: self.takeover_new_mint_vault.to_account_info(),
+                    authority: self.takeover.to_account_info(),
+                    mint: self.new_mint.to_account_info(),
+                    system_program: self.system_program.to_account_info(),
+                    token_program: self.token_program.to_account_info(),
+                }
+            )
+        )?;
+
+        // Mint the new supply + the inflation amount to the takeover vault
+        let amount = self.old_mint.supply
+            .checked_add(inflation_amount.presale_amount.clone())
+            .ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.treasury_amount.clone())
+            .ok_or(TakeoverError::Overflow)?
+            .checked_add(inflation_amount.rewards_amount.clone())
+            .ok_or(TakeoverError::Overflow)?;
+
+        mint_to(
+            CpiContext::new(
+                self.token_program.to_account_info(),
+                MintTo {
+                    mint: self.new_mint.to_account_info(),
+                    to: self.takeover_new_mint_vault.to_account_info(),
+                    authority: self.admin.to_account_info(),
+                }
+            ),
+            amount
+        )?;
+
+        // Remove the mint authority so nobody can mint more tokens
         set_authority(
             CpiContext::new(
                 self.token_program.to_account_info(),
@@ -371,12 +446,14 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         ).checked_mul(args.rewards_inflation as u64)
             .ok_or(TakeoverError::Overflow)?;
 
-        referral_amount = tmp.checked_mul(referral_split as u64)
+        referral_amount = tmp
+            .checked_mul(referral_split as u64)
             .ok_or(TakeoverError::Overflow)?
             .checked_div(10000)
             .ok_or(TakeoverError::Underflow)?;
 
-        rewards_amount = tmp.checked_sub(referral_amount)
+        rewards_amount = tmp
+            .checked_sub(referral_amount)
             .ok_or(TakeoverError::Underflow)?;
     } else {
         referral_amount = 0;
@@ -439,7 +516,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     let bumps = ctx.bumps;
 
     // Initialize the takeover and mint rewards + old_mint supply to the takeover vault
-    ctx.accounts.initialize_takeover(inflation_amount, swap_period, args.takeover_wallet, args.presale_price, args.referral, bumps.takeover)?;
+    ctx.accounts.initialize_takeover(inflation_amount.clone(), swap_period, args.takeover_wallet, args.presale_price, args.referral, bumps.takeover)?;
 
     // Initialize the new mint using Metaplex
     match ctx.accounts.token_program.key() {
@@ -455,7 +532,7 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     }
 
     // Remove the mint authority so nobody can mint more tokens
-    ctx.accounts.remove_mint_authority()?;
+    ctx.accounts.operate_on_new_mint(inflation_amount)?;
 
     Ok(())
 }

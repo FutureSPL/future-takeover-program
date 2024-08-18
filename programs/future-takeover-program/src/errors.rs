@@ -20,6 +20,8 @@ pub enum TakeoverError {
     InvalidTokenExtensionArgs,
     #[msg("You used Invalid Token Program.")]
     InvalidTokenProgram,
+    #[msg("You used Invalid Associated Token Account.")]
+    InvalidAssociatedToken,
 
     // Takeover Errors
     #[msg("You need to wait for the swap period to start")]

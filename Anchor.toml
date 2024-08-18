@@ -5,17 +5,17 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-future_takeover_program = "6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5"
+future_takeover_program = "5fgVyP9E5cWqvj2z5421932uLzQuqPgEwA62TUWtaNDw"
 
 [programs.devnet]
-future_takeover_program = "6p1zdbGeiNQmegXSNhkqSRrumFVf2GgbaVX3M5LMpgV5"
+future_takeover_program = "5fgVyP9E5cWqvj2z5421932uLzQuqPgEwA62TUWtaNDw"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "mainnet"
-wallet = "/Users/leo/.config/solana/mainnet.json"
+cluster = "localnet"
+wallet = "/Users/leo/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

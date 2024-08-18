@@ -7,7 +7,7 @@ pub mod constant;
 pub mod instructions;
 pub use instructions::*;
 
-declare_id!("DWF1qAyiiKbSsuRSBBnJmQF6ePkCbtWsks8YwXVrPCcN");
+declare_id!("HB5Ybd6Rm37Q5JFy1LQZ3UDU66XiHvDVDcgn2DGYLzk5");
 
 #[program]
 pub mod future_takeover_program {
