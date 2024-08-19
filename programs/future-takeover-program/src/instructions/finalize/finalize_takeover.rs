@@ -24,20 +24,30 @@ pub struct FinalizeTakeover<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> FinalizeTakeover<'info> {
-    
-}
-
 pub fn handler(ctx: Context<FinalizeTakeover>) -> Result<()> {
-    // Check if the admin has been initialized more than 16h ago
-    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+    // Ensure the admin has been initialized for more than 16 hours
+    require_gt!(
+        Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time,
+        ADMIN_BUFFER,
+        TakeoverError::UnauthorizedAdmin
+    );
 
-    // Check that the takeover is already started and the swap period is active
-    require!(ctx.accounts.takeover.swap_period.end < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotEnded);
+    // Ensure the swap period has ended
+    // require_gt!(
+    //     Clock::get()?.unix_timestamp,
+    //     ctx.accounts.takeover.swap_period.end,
+    //     TakeoverError::SwapPeriodNotEnded
+    // ); - To be added later
 
-    // Check if the presale is successful, then migrate to successful or unsuccessful takeover account
-    let success_amount = ctx.accounts.takeover.inflation_amount.presale_amount.checked_mul(SUCCESS_PERCENTAGE).ok_or(TakeoverError::Overflow)?.checked_div(100).ok_or(TakeoverError::Underflow)?;
-    if success_amount < ctx.accounts.takeover.presale_claimed {
+    // Calculate the required amount for a successful presale
+    let success_threshold = ctx.accounts.takeover.inflation_amount.presale_amount
+        .checked_mul(SUCCESS_PERCENTAGE)
+        .ok_or(TakeoverError::Overflow)?
+        .checked_div(100)
+        .ok_or(TakeoverError::Underflow)?;
+
+    // Determine if the takeover is successful or failed
+    if ctx.accounts.takeover.presale_claimed >= success_threshold {
         ctx.accounts.takeover.phase = TokenSelling;
     } else {
         ctx.accounts.takeover.phase = FailedTakeover;

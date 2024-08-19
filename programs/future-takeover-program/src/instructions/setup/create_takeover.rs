@@ -1,8 +1,21 @@
-use anchor_lang::{prelude::*, solana_program::program::invoke, system_program::{create_account, CreateAccount}};
+use anchor_lang::{
+    prelude::*, 
+    solana_program::program::invoke, 
+    system_program::{ create_account, CreateAccount }
+};
 
 use anchor_spl::{
-    associated_token::{create, get_associated_token_address_with_program_id, AssociatedToken, Create}, metadata::{mpl_token_metadata::instructions::CreateV1CpiBuilder, Metadata}, token::ID as TOKEN_ID, token_2022::spl_token_2022::{extension::{self, ExtensionType}, instruction::{initialize_mint_close_authority, initialize_permanent_delegate, AuthorityType}, state::Mint as SplToken22Mint, ID as TOKEN_2022_ID}, token_interface::{
-        mint_to, set_authority, spl_pod, spl_token_metadata_interface::{instruction::initialize, state::TokenMetadata}, Mint, MintTo, SetAuthority, TokenInterface 
+    associated_token::{ AssociatedToken, get_associated_token_address_with_program_id, create, Create },
+    metadata::{ Metadata, mpl_token_metadata::{ instructions::CreateV1CpiBuilder, types::TokenStandard }}, 
+    token::ID as TOKEN_ID, 
+    token_2022::spl_token_2022::{state::Mint as SplToken22Mint, ID as TOKEN_2022_ID}, 
+    token_interface::{
+        Mint, TokenInterface, mint_to, MintTo, set_authority, SetAuthority, spl_pod, 
+        spl_token_2022::{
+            extension::{ ExtensionType, metadata_pointer::instruction::initialize as initialize_metadata_pointer, interest_bearing_mint::instruction::initialize as initialize_interest_bearing_mint, transfer_fee::instruction::initialize_transfer_fee_config, transfer_hook::instruction::initialize as initialize_transfer_hook },
+            instruction::{initialize_mint_close_authority, initialize_permanent_delegate, AuthorityType}
+        },
+        spl_token_metadata_interface::{instruction::initialize as initialize_metadata_interface, state::TokenMetadata},  
     }
 };
 
@@ -30,7 +43,7 @@ pub struct CreateTakeoverArgs {
     pub token_extension: Option<TokenExtensionArgs>,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct TokenExtensionArgs {
     pub transfer_fee: Option<TransferFeeArgs>,
     pub interest_bearing: Option<InterestBearingArgs>,
@@ -39,30 +52,29 @@ pub struct TokenExtensionArgs {
     pub transfer_hook: Option<TransferHookArgs>,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct TransferFeeArgs {
     pub fee_authority: Pubkey,
     pub transfer_fee_basis_points: u16,
-    pub maximum_fee: u64,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct InterestBearingArgs {
     pub rate_authority: Pubkey,
     pub rate: i16,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct PermanentDelegateArgs {
     pub delegate_authority: Pubkey,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct CloseMintArgs {
     pub close_mint_authority: Pubkey,
 }
 
-#[derive(AnchorDeserialize, AnchorSerialize, Debug)]
+#[derive(AnchorDeserialize, AnchorSerialize)]
 pub struct TransferHookArgs {
     pub hook_authority: Pubkey,
     pub hook_program_id: Pubkey,
@@ -77,7 +89,6 @@ pub struct CreateTakeover<'info> {
         bump = admin_profile.bump,
     )]
     pub admin_profile: Box<Account<'info, AdminProfile>>,
-
     #[account(
         init,
         payer = admin,
@@ -86,7 +97,6 @@ pub struct CreateTakeover<'info> {
         space = Takeover::INIT_SPACE,
     )]
     pub takeover: Box<Account<'info, Takeover>>,
-    
     pub old_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
     pub new_mint: Signer<'info>,
@@ -96,7 +106,6 @@ pub struct CreateTakeover<'info> {
     #[account(mut)]
     /// CHECK: This will be checked by the create_mint instruction
     pub takeover_new_mint_vault: UncheckedAccount<'info>,
-
     pub system_program: Program<'info, System>,
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
     pub sysvar_instruction_program: AccountInfo<'info>,
@@ -107,8 +116,8 @@ pub struct CreateTakeover<'info> {
 }
 
 impl<'info> CreateTakeover<'info> {
+    // Initialize a new Takeover Account
     fn initialize_takeover(&mut self,  inflation_amount: InflationAmount, swap_period: SwapPeriod, takeover_wallet: Pubkey, presale_price: u64, referral: Option<Pubkey>, bump: u8) -> Result<()> {
-        // Populate the takeover account
         self.takeover.set_inner(
             Takeover {
                 old_mint: self.old_mint.key(),
@@ -128,14 +137,14 @@ impl<'info> CreateTakeover<'info> {
         Ok(())
     }
 
-    fn intialize_new_native_mint(&self, name: String, symbol: String, uri: String) -> Result<()> {
-
+    // Initialize a new Mint Account & Metaplex Metadata Account
+    fn initialize_native_mint(&self, name: String, symbol: String, uri: String) -> Result<()> {
         let rent = &Rent::from_account_info(&self.rent.to_account_info())?;
         let space = anchor_spl::token::Mint::LEN;
         let lamports = rent.minimum_balance(space);
 
         create_account(
-        CpiContext::new(
+            CpiContext::new(
                 self.token_program.to_account_info(),
                 CreateAccount {
                     from: self.admin.to_account_info(),
@@ -172,18 +181,38 @@ impl<'info> CreateTakeover<'info> {
             .symbol(symbol)
             .uri(uri)
             .seller_fee_basis_points(0)
+            .token_standard(TokenStandard::Fungible)
             .invoke()?;
-
-
 
         Ok(())
     }
 
-    fn initialize_new_extension_mint(&self, name: String, symbol: String, uri: String, token_extension: TokenExtensionArgs) -> Result<()> {
+    // Initialize a new Mint Account & T22 Metadata Account + Extensions (if any)
+    fn initialize_extension_mint(&self, name: String, symbol: String, uri: String, token_extension: TokenExtensionArgs) -> Result<()> {
+        let mut extension_types: Vec<ExtensionType> = vec![ExtensionType::MetadataPointer];
+        
+        if token_extension.close_mint.is_some() {
+            extension_types.push(ExtensionType::MintCloseAuthority);
+        }
 
-        let mut extension_type: Vec<ExtensionType> = vec![];
+        if token_extension.interest_bearing.is_some() {
+            extension_types.push(ExtensionType::InterestBearingConfig);
+        }
 
-        extension_type.push(ExtensionType::MetadataPointer);
+        if token_extension.permanent_delegate.is_some() {
+            extension_types.push(ExtensionType::PermanentDelegate);
+        }
+
+        if token_extension.transfer_fee.is_some() {
+            extension_types.push(ExtensionType::TransferFeeConfig);
+        }
+
+        // Unavailable for the moment
+        // if token_extension.transfer_hook.is_some() {
+        //     extension_types.push(ExtensionType::TransferHook);
+        // }
+
+        let size = ExtensionType::try_calculate_account_len::<SplToken22Mint>(&extension_types).unwrap();
 
         let metadata = TokenMetadata {
             update_authority: spl_pod::optional_keys::OptionalNonZeroPubkey::try_from(None).unwrap(),
@@ -193,33 +222,12 @@ impl<'info> CreateTakeover<'info> {
             uri,
             additional_metadata: vec![],
         };
-        
-        if token_extension.close_mint.is_some() {
-            extension_type.push(ExtensionType::MintCloseAuthority);
-        }
-
-        if token_extension.interest_bearing.is_some() {
-            extension_type.push(ExtensionType::InterestBearingConfig);
-        }
-
-        if token_extension.permanent_delegate.is_some() {
-            extension_type.push(ExtensionType::PermanentDelegate);
-        }
-
-        if token_extension.transfer_fee.is_some() {
-            extension_type.push(ExtensionType::TransferFeeConfig);
-        }
-
-        if token_extension.transfer_hook.is_some() {
-            extension_type.push(ExtensionType::TransferHook);
-        }
-
-        let size = ExtensionType::try_calculate_account_len::<SplToken22Mint>(&extension_type).unwrap();
         let extension_extra_space = metadata.tlv_size_of().unwrap();
+
         let lamports = self.rent.minimum_balance(size + extension_extra_space);
 
         create_account(
-        CpiContext::new(
+            CpiContext::new(
                 self.token_program.to_account_info(),
                 CreateAccount {
                     from: self.admin.to_account_info(),
@@ -227,12 +235,12 @@ impl<'info> CreateTakeover<'info> {
                 }
             ),
             lamports,
-            (size).try_into().unwrap(),
+            size as u64,
             &self.token_program.key(),
         )?;
 
         invoke(
-            &extension::metadata_pointer::instruction::initialize(
+            &initialize_metadata_pointer(
                 &self.token_program.key(),
                 &self.new_mint.key(),
                 None,
@@ -258,7 +266,7 @@ impl<'info> CreateTakeover<'info> {
 
         if let Some(interest_bearing) = token_extension.interest_bearing {
             invoke(
-                &extension::interest_bearing_mint::instruction::initialize(
+                &initialize_interest_bearing_mint(
                     &self.token_program.key(),
                     &self.new_mint.key(),
                     Some(interest_bearing.rate_authority),
@@ -283,31 +291,33 @@ impl<'info> CreateTakeover<'info> {
             )?;
         }
 
+        // Maximum Fee set to 0 for the moment -> Owner will need to change this value after
         if let Some(transfer_fee) = token_extension.transfer_fee {
             invoke(
-                &extension::transfer_fee::instruction::initialize_transfer_fee_config(
+                &initialize_transfer_fee_config(
                     &self.token_program.key(),
                     &self.new_mint.key(),
                     Some(&transfer_fee.fee_authority),
                     Some(&transfer_fee.fee_authority),
                     transfer_fee.transfer_fee_basis_points,
-                    transfer_fee.maximum_fee,
+                    0,
                 )?,
                 &vec![self.new_mint.to_account_info()],
             )?;
         }
 
-        if let Some(transfer_hook) = token_extension.transfer_hook {
-            invoke(
-                &extension::transfer_hook::instruction::initialize(
-                    &self.token_program.key(),
-                    &self.new_mint.key(),
-                    Some(transfer_hook.hook_authority),
-                    Some(transfer_hook.hook_program_id),
-                )?,
-                &vec![self.new_mint.to_account_info()],
-            )?;
-        }
+        // Unavailable for the moment
+        // if let Some(transfer_hook) = token_extension.transfer_hook {
+        //     invoke(
+        //         &initialize_transfer_hook(
+        //             &self.token_program.key(),
+        //             &self.new_mint.key(),
+        //             Some(transfer_hook.hook_authority),
+        //             Some(transfer_hook.hook_program_id),
+        //         )?,
+        //         &vec![self.new_mint.to_account_info()],
+        //     )?;
+        // }
 
         anchor_spl::token_2022::initialize_mint2(
             CpiContext::new(
@@ -322,7 +332,7 @@ impl<'info> CreateTakeover<'info> {
         )?;
 
         invoke(
-            &initialize(
+            &initialize_metadata_interface(
                 &self.token_program.key(),
                 &self.new_mint.key(),
                 &self.new_mint.key(),
@@ -341,9 +351,8 @@ impl<'info> CreateTakeover<'info> {
         Ok(())
     }
 
-    fn operate_on_new_mint(&self, inflation_amount: InflationAmount) -> Result<()> {
-
-        // Check if the takeover_new_mint_vault is the associated token account of the takeover wallet
+    // Create the ATA, Mint to the Takeover Vault and Set the Mint Authority to None
+    fn finalize_mint(&self, inflation_amount: InflationAmount) -> Result<()> {
         require_eq!(
             self.takeover_new_mint_vault.key(), 
             get_associated_token_address_with_program_id(
@@ -354,7 +363,6 @@ impl<'info> CreateTakeover<'info> {
             TakeoverError::InvalidAssociatedToken
         );
 
-        // Create the Takeover ATA
         create(
             CpiContext::new(
                 self.token_program.to_account_info(),
@@ -369,7 +377,6 @@ impl<'info> CreateTakeover<'info> {
             )
         )?;
 
-        // Mint the new supply + the inflation amount to the takeover vault
         let amount = self.old_mint.supply
             .checked_add(inflation_amount.presale_amount.clone())
             .ok_or(TakeoverError::Overflow)?
@@ -390,7 +397,6 @@ impl<'info> CreateTakeover<'info> {
             amount
         )?;
 
-        // Remove the mint authority so nobody can mint more tokens
         set_authority(
             CpiContext::new(
                 self.token_program.to_account_info(),
@@ -418,121 +424,102 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         end: args.end,
     };
 
-    // Set parameters for rewards, presale and treasury based on the FDMC
-    let inflation_amount: InflationAmount;
-
-    let presale_amount: u64 = (
-        ctx.accounts.old_mint.supply
-            .checked_div(10000)
-            .ok_or(TakeoverError::Underflow)?
-    ).checked_mul(args.presale_inflation as u64)
+    // Calculate the Presale Amount
+    let presale_amount = ctx.accounts.old_mint.supply
+        .checked_div(10000)
+        .ok_or(TakeoverError::Underflow)?
+        .checked_mul(args.presale_inflation as u64)
         .ok_or(TakeoverError::Overflow)?;
 
-    let treasury_amount: u64 = (
-        ctx.accounts.old_mint.supply
-            .checked_div(10000)
-            .ok_or(TakeoverError::Underflow)?
-    ).checked_mul(args.treasury_inflation as u64)
+    // Calculate the Treasury Amount
+    let treasury_amount = ctx.accounts.old_mint.supply
+        .checked_div(10000)
+        .ok_or(TakeoverError::Underflow)?
+        .checked_mul(args.treasury_inflation as u64)
         .ok_or(TakeoverError::Overflow)?;
 
-    let rewards_amount: u64;
-    let referral_amount: u64;
-
-    if let Some(referral_split) = args.referral_split {
-        let tmp = (
-            ctx.accounts.old_mint.supply
-                .checked_div(10000)
-                .ok_or(TakeoverError::Underflow)?
-        ).checked_mul(args.rewards_inflation as u64)
+    // Calculate the Rewards Amount and Referral Amount (if any)
+    let (rewards_amount, referral_amount) = if let Some(referral_split) = args.referral_split {
+        let tmp = ctx.accounts.old_mint.supply
+            .checked_div(10000)
+            .ok_or(TakeoverError::Underflow)?
+            .checked_mul(args.rewards_inflation as u64)
             .ok_or(TakeoverError::Overflow)?;
-
-        referral_amount = tmp
+        let referral_amount = tmp
             .checked_mul(referral_split as u64)
             .ok_or(TakeoverError::Overflow)?
             .checked_div(10000)
             .ok_or(TakeoverError::Underflow)?;
-
-        rewards_amount = tmp
+        let rewards_amount = tmp
             .checked_sub(referral_amount)
             .ok_or(TakeoverError::Underflow)?;
+        (rewards_amount, referral_amount)
     } else {
-        referral_amount = 0;
-
-        rewards_amount = (
-            ctx.accounts.old_mint.supply
-                .checked_div(10000)
-                .ok_or(TakeoverError::Underflow)?
-        ).checked_mul(args.rewards_inflation as u64)
+        let rewards_amount = ctx.accounts.old_mint.supply
+            .checked_div(10000)
+            .ok_or(TakeoverError::Underflow)?
+            .checked_mul(args.rewards_inflation as u64)
             .ok_or(TakeoverError::Overflow)?;
-    }
+        (rewards_amount, 0)
+    };
 
-    match args.fdmc {
+    // Calculate the Inflation Amounts
+    let inflation_amount = match args.fdmc {
         0 => {
-            require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation <= LOW_PRESALE_BASIS_POINT && args.treasury_inflation <= LOW_TREASURY_BASIS_POINT && args.rewards_inflation <= LOW_REWARDS_BASIS_POINT,
-                TakeoverError::InvalidInflationAmounts
-            );
-            inflation_amount = InflationAmount {
+            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
+            args.presale_inflation <= LOW_PRESALE_BASIS_POINT && args.treasury_inflation <= LOW_TREASURY_BASIS_POINT && args.rewards_inflation <= LOW_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            InflationAmount {
                 level: Level::Low,
                 presale_amount,
                 treasury_amount, 
                 rewards_amount,
                 referral_amount
-            };
-        }
+            }
+        },
         1 => {
-            require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation <= MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation <= MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation <= MEDIUM_REWARDS_BASIS_POINT,
-                TakeoverError::InvalidInflationAmounts
-            );
-            inflation_amount = InflationAmount {
+            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
+            args.presale_inflation <= MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation <= MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation <= MEDIUM_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            InflationAmount {
                 level: Level::Medium,
                 presale_amount,
                 treasury_amount, 
                 rewards_amount,
                 referral_amount
-            };
-        }
+            }
+        },
         2 => {
-            require!(
-                args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-                args.presale_inflation <= HIGH_PRESALE_BASIS_POINT && args.treasury_inflation <= HIGH_TREASURY_BASIS_POINT && args.rewards_inflation <= HIGH_REWARDS_BASIS_POINT,
-                TakeoverError::InvalidInflationAmounts
-            );
-            inflation_amount = InflationAmount {
+            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
+            args.presale_inflation <= HIGH_PRESALE_BASIS_POINT && args.treasury_inflation <= HIGH_TREASURY_BASIS_POINT && args.rewards_inflation <= HIGH_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            InflationAmount {
                 level: Level::High,
                 presale_amount,
                 treasury_amount, 
                 rewards_amount,
                 referral_amount
-            };
-        }
+            }
+        },
         _ => return Err(TakeoverError::InvalidFdmcValue.into()),
-    }
+    };
 
     // Generate the bumps
     let bumps = ctx.bumps;
 
-    // Initialize the takeover and mint rewards + old_mint supply to the takeover vault
+    // ACTIONS
     ctx.accounts.initialize_takeover(inflation_amount.clone(), swap_period, args.takeover_wallet, args.presale_price, args.referral, bumps.takeover)?;
 
-    // Initialize the new mint using Metaplex
     match ctx.accounts.token_program.key() {
         TOKEN_2022_ID => {
             require!(args.token_extension.is_some(), TakeoverError::InvalidTokenExtensionArgs);
-            ctx.accounts.initialize_new_extension_mint(args.name, args.symbol, args.uri, args.token_extension.unwrap())?;
+            ctx.accounts.initialize_extension_mint(args.name, args.symbol, args.uri, args.token_extension.unwrap())?;
         },
         TOKEN_ID => {
             require!(args.token_extension.is_none(), TakeoverError::InvalidTokenExtensionArgs);
-            ctx.accounts.intialize_new_native_mint(args.name, args.symbol, args.uri)?;
+            ctx.accounts.initialize_native_mint(args.name, args.symbol, args.uri)?;
         },
         _ => return Err(TakeoverError::InvalidTokenProgram.into()),
     }
 
-    // Remove the mint authority so nobody can mint more tokens
-    ctx.accounts.operate_on_new_mint(inflation_amount)?;
+    ctx.accounts.finalize_mint(inflation_amount)?;
 
     Ok(())
 }

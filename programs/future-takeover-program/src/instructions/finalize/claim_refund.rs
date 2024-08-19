@@ -13,7 +13,6 @@ use crate::{
 pub struct ClaimRefund<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
-
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
@@ -35,7 +34,6 @@ pub struct ClaimRefund<'info> {
     )]
     /// CHECK: This account gets checked during the instruction since it could be uninitialized
     pub swap_receipt: UncheckedAccount<'info>,
-
     #[account(mut)]
     pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(mut)]
@@ -50,6 +48,7 @@ pub struct ClaimRefund<'info> {
         mut,
         associated_token::mint = old_mint,
         associated_token::authority = takeover,
+        associated_token::token_program = token_program
     )]
     pub takeover_old_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
@@ -57,46 +56,53 @@ pub struct ClaimRefund<'info> {
         payer = user,
         associated_token::mint = old_mint,
         associated_token::authority = user,
+        associated_token::token_program = token_program
     )]
     pub user_old_mint_token: Box<InterfaceAccount<'info, TokenAccount>>,
 
     pub system_program: Program<'info, System>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Interface<'info, TokenInterface>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 impl<'info> ClaimRefund<'info> {
     pub fn refund_presale(&mut self, amount: u64, bump: u8) -> Result<()> {
-        // Refund the presale amount in Sol
-        let takeover_key = self.takeover.key().clone();
+        // Prepare seeds for signing
+        let takeover_key = self.takeover.key();
         let signer_seeds = &[
             b"takeover_vault",
             takeover_key.as_ref(),
             &[bump],
         ];
 
-        // Convert the amount to the non_decimals form
-        let decimals_factor = 10u64.checked_pow(self.new_mint.decimals as u32).ok_or(TakeoverError::Overflow)?;
-        let amount_not_in_decimals = amount.checked_div(decimals_factor).ok_or(TakeoverError::Overflow)?;
+        // Convert the amount to its non-decimal form
+        let decimals_factor = 10u64
+            .checked_pow(self.new_mint.decimals as u32)
+            .ok_or(TakeoverError::Overflow)?;
+        let amount_in_sol = amount
+            .checked_div(decimals_factor)
+            .ok_or(TakeoverError::Overflow)?;
 
+        // Perform the SOL transfer for the refund
         system_program::transfer(
             CpiContext::new_with_signer(
-                self.system_program.to_account_info(), 
+                self.system_program.to_account_info(),
                 system_program::Transfer {
                     from: self.takeover_vault.to_account_info(),
                     to: self.user.to_account_info(),
                 },
-            &[signer_seeds],
+                &[signer_seeds],
             ),
-            amount_not_in_decimals.checked_mul(self.takeover.presale_price).ok_or(TakeoverError::Overflow)?,        
+            amount_in_sol
+                .checked_mul(self.takeover.presale_price)
+                .ok_or(TakeoverError::Overflow)?,
         )?;
 
         Ok(())
     }
 
-    pub fn refund_swap(&mut self, amount:u64) -> Result<()> {
-        // Transfer the old_mint tokens to the user
-        let old_mint_key = self.old_mint.key().clone();
+    pub fn refund_swap(&mut self, amount: u64) -> Result<()> {
+        let old_mint_key = self.old_mint.key();
         let signer_seeds = &[
             b"takeover",
             old_mint_key.as_ref(),
@@ -124,10 +130,10 @@ impl<'info> ClaimRefund<'info> {
 
 pub fn handler(ctx: Context<ClaimRefund>) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        FailedTakeover => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     FailedTakeover => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // } - To be added later
 
     // Verify if there is a swap receipt account and if there is, refund the presale
     let info = ctx.accounts.swap_receipt.to_account_info();
@@ -135,10 +141,19 @@ pub fn handler(ctx: Context<ClaimRefund>) -> Result<()> {
 
     match  SwapReceipt::try_deserialize(&mut &data[..]) {
         Ok(mut swap_receipt ) => {
-            // Check if the presale receipt is valid
-            require!(swap_receipt.takeover == ctx.accounts.takeover.key(), TakeoverError::InvalidTakeoverData);
-            // Check if the presale amount is greater than 0
-            require!(swap_receipt.swapped_amount > 0, TakeoverError::PresaleAmountZero);
+            // Check if the takeover in the swap_receipt is the same as the current takeover
+            require_eq!(
+                swap_receipt.takeover,
+                ctx.accounts.takeover.key(), 
+                TakeoverError::InvalidTakeoverData
+            );
+
+            // Check if the swapped amount is greater than 0
+            require_gt!(
+                swap_receipt.swapped_amount,
+                0, 
+                TakeoverError::PresaleAmountZero
+            );
 
             // Refund the presale amount
             let swapped_amount = swap_receipt.swapped_amount;
@@ -157,17 +172,25 @@ pub fn handler(ctx: Context<ClaimRefund>) -> Result<()> {
         }
     }
     
-
     // Verify if there is a presale receipt account and if there is, refund the presale
     let info = ctx.accounts.presale_receipt.to_account_info();
     let mut data = info.try_borrow_mut_data()?;
 
     match  PresaleReceipt::try_deserialize(&mut &data[..]) {
         Ok(mut presale_receipt ) => {
-            // Check if the presale receipt is valid
-            require!(presale_receipt.takeover == ctx.accounts.takeover.key(), TakeoverError::InvalidTakeoverData);
-            // Check if the presale amount is greater than 0
-            require!(presale_receipt.presale_amount > 0, TakeoverError::PresaleAmountZero);
+            // Check if the takeover in the swap_receipt is the same as the current takeover
+            require_eq!(
+                presale_receipt.takeover,
+                ctx.accounts.takeover.key(), 
+                TakeoverError::InvalidTakeoverData
+            );
+
+            // Check if the swapped amount is greater than 0
+            require_gt!(
+                presale_receipt.presale_amount,
+                0, 
+                TakeoverError::PresaleAmountZero
+            );
 
             // Refund the presale amount
             let presale_amount = presale_receipt.presale_amount;

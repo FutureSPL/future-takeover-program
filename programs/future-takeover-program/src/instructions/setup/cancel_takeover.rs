@@ -1,12 +1,11 @@
 use anchor_lang::prelude::*;
 
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token_interface::{ Mint, TokenInterface, TokenAccount, burn, Burn, close_account, CloseAccount} 
-};
+use anchor_spl::token_interface::{ Mint, TokenInterface, TokenAccount, burn, Burn, close_account, CloseAccount };
 
 use crate::{
-    constant::ADMIN_BUFFER, errors::TakeoverError, state::{AdminProfile, Takeover}
+    constant::ADMIN_BUFFER, 
+    errors::TakeoverError, 
+    state::{AdminProfile, Takeover}
 };
 
 #[derive(Accounts)]
@@ -18,7 +17,6 @@ pub struct CancelTakeover<'info> {
         bump = admin_profile.bump,
     )]
     pub admin_profile: Account<'info, AdminProfile>,
-
     #[account(
         mut,
         close = admin,
@@ -26,23 +24,23 @@ pub struct CancelTakeover<'info> {
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
-
     #[account(mut)]
     pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
+        associated_token::token_program = token_program
     )]
     pub takeover_new_mint_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 impl<'info> CancelTakeover<'info> {
-    fn empty_and_burn_takeover_vault(&self) -> Result<()> {
+
+    // Empty and burn the takeover vault amount
+    fn burn_and_close_vault(&self) -> Result<()> {
         let vault_amount = self.takeover_new_mint_vault.amount;
         let old_mint = self.takeover.old_mint.key().clone();
 
@@ -52,7 +50,6 @@ impl<'info> CancelTakeover<'info> {
             &[self.takeover.bump],
         ];
 
-        // Burn the tokens in the vault
         burn(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
@@ -66,10 +63,9 @@ impl<'info> CancelTakeover<'info> {
             vault_amount,
         )?;
 
-        // Close the vault account
         close_account(
             CpiContext::new_with_signer(
-                self.associated_token_program.to_account_info(),
+                self.token_program.to_account_info(),
                 CloseAccount {
                     account: self.takeover_new_mint_vault.to_account_info(),
                     destination: self.admin.to_account_info(),
@@ -86,13 +82,22 @@ impl<'info> CancelTakeover<'info> {
 
 pub fn handler(ctx: Context<CancelTakeover>) -> Result<()> {
     // Check if the admin has been initialized more than 16h ago
-    require!(Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time > ADMIN_BUFFER, TakeoverError::UnauthorizedAdmin);
+    require_gt!(
+        Clock::get()?.unix_timestamp
+            .checked_sub(ctx.accounts.admin_profile.creation_time)
+            .ok_or(TakeoverError::Underflow)?, 
+        ADMIN_BUFFER, 
+        TakeoverError::UnauthorizedAdmin
+    );
 
     // Check if the takeover has not started yet
-    // require!(ctx.accounts.takeover.swap_period.start > Clock::get()?.unix_timestamp, TakeoverError::TakeoverAlreadyStarted);
+    // require_gt!(
+    //     ctx.accounts.takeover.swap_period.start, 
+    //     Clock::get()?.unix_timestamp, 
+    //     TakeoverError::TakeoverAlreadyStarted
+    // );
 
-    // Empty and burn the takeover vault amount
-    ctx.accounts.empty_and_burn_takeover_vault()?;
+    ctx.accounts.burn_and_close_vault()?;
 
     Ok(())
 }

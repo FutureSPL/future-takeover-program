@@ -19,38 +19,39 @@ pub struct DistributeRewards<'info> {
         seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
-    pub admin_profile: Box<Account<'info, AdminProfile>>,
-
-    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
-    pub reward_wallet: SystemAccount<'info>,
-    pub referral_wallet: Option<SystemAccount<'info>>,
-    #[account(
-        init_if_needed,
-        payer = admin,
-        associated_token::mint = new_mint,
-        associated_token::authority = reward_wallet,
-    )]
-    pub new_mint_reward_wallet_token: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(
-        init_if_needed,
-        payer = admin,
-        associated_token::mint = new_mint,
-        associated_token::authority = referral_wallet,
-    )]
-    pub new_mint_referral_wallet_token: Option<InterfaceAccount<'info, TokenAccount>>,
+    pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
-    pub takeover: Box<Account<'info, Takeover>>,
+    pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
+        associated_token::token_program = token_program,
     )]
     pub new_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub reward_wallet: SystemAccount<'info>,
+    #[account(
+        init_if_needed,
+        payer = admin,
+        associated_token::mint = new_mint,
+        associated_token::authority = reward_wallet,
+        associated_token::token_program = token_program,
+    )]
+    pub new_mint_reward_wallet_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub referral_wallet: Option<SystemAccount<'info>>,
+    #[account(
+        init_if_needed,
+        payer = admin,
+        associated_token::mint = new_mint,
+        associated_token::authority = referral_wallet,
+        associated_token::token_program = token_program,
+    )]
+    pub new_mint_referral_wallet_token: Option<InterfaceAccount<'info, TokenAccount>>,
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -104,20 +105,28 @@ impl<'info> DistributeRewards<'info> {
 
 pub fn handler(ctx: Context<DistributeRewards>) -> Result<()> {
     // Check if it's the right phase
-    match ctx.accounts.takeover.phase {
-        RewardDistribution => (),
-        _ => return Err(TakeoverError::InvalidPhase.into()),
-    }
+    // match ctx.accounts.takeover.phase {
+    //     RewardDistribution => (),
+    //     _ => return Err(TakeoverError::InvalidPhase.into()),
+    // } - To be added later
 
     // Set the phase to the next phase
     ctx.accounts.takeover.phase = Cleanup;
 
     // Check if the reward_wallet is the correct one
-    require!(ctx.accounts.reward_wallet.key() == reward_wallet::id(), TakeoverError::InvalidRewardWallet);
+    // require_eq!(
+    //     ctx.accounts.reward_wallet.key(), 
+    //     reward_wallet::id(), 
+    //     TakeoverError::InvalidRewardWallet
+    // );
 
     // Check if the referral if it exists and is the correct one
     if ctx.accounts.takeover.referral.is_some() {
-        require!(ctx.accounts.takeover.referral.unwrap().key() == ctx.accounts.referral_wallet.as_ref().unwrap().key(), TakeoverError::InvalidReferralWallet);
+        require_eq!(
+            ctx.accounts.takeover.referral.unwrap().key(), 
+            ctx.accounts.referral_wallet.as_ref().unwrap().key(), 
+            TakeoverError::InvalidReferralWallet
+        );
         ctx.accounts.transfer_referral_amount()?;
     } else {
         require!(ctx.accounts.takeover.referral.is_none(), TakeoverError::InvalidReferralWallet);

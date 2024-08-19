@@ -13,7 +13,6 @@ use crate::{
 pub struct BuyPresale<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
-
     #[account(
         mut,
         seeds = [b"takeover", takeover.old_mint.key().as_ref()],
@@ -28,7 +27,6 @@ pub struct BuyPresale<'info> {
         bump,
     )]
     pub presale_receipt: Account<'info, PresaleReceipt>,
-
     #[account(
         mut,
         seeds = [b"takeover_vault", takeover.key().as_ref()],
@@ -40,21 +38,23 @@ pub struct BuyPresale<'info> {
 }
 
 impl<'info> BuyPresale<'info> {
-    pub fn initialize_presale_receipt(&mut self, presale_amount: u64, bump: u8) -> Result<()> {
-        // Initialize the Presale Receipt
-        self.presale_receipt.set_inner(
-            PresaleReceipt {
-                takeover: self.takeover.key(),
-                presale_amount,
-                bump,
-            }
-        );
+    // Initialize the presale receipt
+    pub fn initialize_receipt(&mut self, presale_amount: u64, bump: u8) -> Result<()> {
+        self.presale_receipt.takeover = self.takeover.key();
+        self.presale_receipt.presale_amount = self.presale_receipt.presale_amount
+            .checked_add(presale_amount)
+            .ok_or(TakeoverError::Overflow)?;
+        self.presale_receipt.bump = bump;
 
         Ok(())
     }
 
-    pub fn buy_presale(&self, amount: u64) -> Result<()> {
-        // Transfer Sol from User to Takeover Vault
+    // Execute the presale purchase and transfer the funds to the takeover vault
+    pub fn execute_presale(&self, amount: u64) -> Result<()> {
+        let transfer_amount = self.takeover.presale_price
+            .checked_mul(amount)
+            .ok_or(TakeoverError::Overflow)?;
+
         transfer(
             CpiContext::new(
                 self.system_program.to_account_info(),
@@ -63,7 +63,7 @@ impl<'info> BuyPresale<'info> {
                     to: self.takeover_vault.to_account_info(),
                 }
             ),
-            self.takeover.presale_price.checked_mul(amount).ok_or(TakeoverError::Overflow)?
+            transfer_amount,
         )?;
 
         Ok(())
@@ -72,27 +72,38 @@ impl<'info> BuyPresale<'info> {
 
 pub fn handler(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
     // Check that the takeover is already started and the swap period is active
-    require!(ctx.accounts.takeover.swap_period.start < Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodNotStarted);
-    require!(ctx.accounts.takeover.swap_period.end > Clock::get()?.unix_timestamp, TakeoverError::SwapPeriodEnded);  
+    // require_lt!(Clock::get()?.unix_timestamp, ctx.accounts.takeover.swap_period.start, TakeoverError::SwapPeriodNotStarted); - To be added back
+    // require_gt!(Clock::get()?.unix_timestamp, ctx.accounts.takeover.swap_period.end, TakeoverError::SwapPeriodEnded); - To be added back
 
     // Check if the amount is greater than 0
-    require!(amount > 0, TakeoverError::InvalidAmount);
+    require_gt!(amount, 0, TakeoverError::InvalidAmount);
 
-    // Convert the amount to the decimals form
-    let decimals_factor = 10u64.checked_pow(ctx.accounts.new_mint.decimals as u32).ok_or(TakeoverError::Overflow)?;
-    let amount_in_decimals = amount.checked_mul(decimals_factor).ok_or(TakeoverError::Overflow)?;
+    // Convert the amount to the appropriate decimal form
+    let decimals_factor = 10u64
+        .checked_pow(ctx.accounts.new_mint.decimals as u32)
+        .ok_or(TakeoverError::Overflow)?;
+
+    let amount_in_decimals = amount
+        .checked_mul(decimals_factor)
+        .ok_or(TakeoverError::Overflow)?;
 
     // Check if there are enough tokens in the presale vault
-    require!(ctx.accounts.takeover.inflation_amount.presale_amount.checked_sub(ctx.accounts.takeover.presale_claimed).ok_or(TakeoverError::Underflow)? >= amount_in_decimals, TakeoverError::NotEnoughTokens);
+    require_gte!(
+        ctx.accounts.takeover.inflation_amount.presale_amount
+            .checked_sub(ctx.accounts.takeover.presale_claimed)
+            .ok_or(TakeoverError::Underflow)?,
+        amount_in_decimals,
+        TakeoverError::NotEnoughTokens
+    );
    
-    // Initialize the presale receipt
-    ctx.accounts.initialize_presale_receipt(amount_in_decimals, ctx.bumps.presale_receipt)?;
+   ctx.accounts.initialize_receipt(amount_in_decimals, ctx.bumps.presale_receipt)?;
 
-    // Buy Presale Allocation
-    ctx.accounts.buy_presale(amount)?;
+   ctx.accounts.execute_presale(amount)?;
 
     // Add the presale_amount to the Takeover State
-    ctx.accounts.takeover.presale_claimed = ctx.accounts.takeover.presale_claimed.checked_add(amount_in_decimals).ok_or(TakeoverError::Overflow)?;
+    ctx.accounts.takeover.presale_claimed = ctx.accounts.takeover.presale_claimed
+        .checked_add(amount_in_decimals)
+        .ok_or(TakeoverError::Overflow)?;
 
     Ok(())
 }

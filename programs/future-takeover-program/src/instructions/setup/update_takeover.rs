@@ -57,9 +57,7 @@ pub fn handler(ctx: Context<UpdateTakeover>, args: UpdateTakeoverArgs) -> Result
     require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
 
     // Update the Takeover State
-    if ctx.accounts.takeover.swap_period.start != args.start || ctx.accounts.takeover.swap_period.end != args.end || ctx.accounts.takeover.takeover_wallet != args.takeover_wallet || ctx.accounts.takeover.presale_price != args.presale_price{
-        ctx.accounts.update_takeover(args.start, args.end, args.takeover_wallet, args.presale_price)?;
-    }
+    ctx.accounts.update_takeover(args.start, args.end, args.takeover_wallet, args.presale_price)?;
 
     Ok(())
 }
