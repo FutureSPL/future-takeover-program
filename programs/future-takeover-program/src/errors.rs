@@ -20,8 +20,30 @@ pub enum TakeoverError {
     InvalidTokenExtensionArgs,
     #[msg("You used Invalid Token Program.")]
     InvalidTokenProgram,
+    #[msg("You used Invalid Mint")]
+    InvalidMint,
     #[msg("You used Invalid Associated Token Account.")]
     InvalidAssociatedToken,
+    #[msg("You used Invalid Takeover Account.")]
+    InvalidTakeoverAddress,
+    #[msg("The Total doesn't add up to 100")]
+    InvalidTotalPercentage,
+    #[msg("Token22 Mint are not supported yet for multitoken migrations")]
+    NotSupported,
+    #[msg("The "decimal" Input is not there.")]
+    DecimalsNotFound,
+    #[msg("The "old_tokens" Input is not there.")]
+    OldTokensNotFound,
+    #[msg("The "old_mint" Input is not there.")]
+    OldMintNotFound,
+    #[msg("The "weight_percentage" Input is not there.")]
+    WeightedPercentageNotFound,
+    #[msg("You used an incorrect number of Old Tokens.")]
+    OldTokenNumberMismatch,
+    #[msg("You passed too many mints (Max is 3)")]
+    TooManyMint,
+    #[msg("This Extension is not currently available.")]
+    ExtensionNotAvaialble,
 
     // Takeover Errors
     #[msg("You need to wait for the swap period to start")]

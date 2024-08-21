@@ -20,7 +20,7 @@ pub struct CancelTakeover<'info> {
     #[account(
         mut,
         close = admin,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -41,14 +41,16 @@ impl<'info> CancelTakeover<'info> {
 
     // Empty and burn the takeover vault amount
     fn burn_and_close_vault(&self) -> Result<()> {
-        let vault_amount = self.takeover_new_mint_vault.amount;
-        let old_mint = self.takeover.old_mint.key().clone();
+        let old_mint = self.takeover.old_mints.old_mint.key();
+        let bump = self.takeover.bump;
 
         let signer_seeds = &[
             b"takeover",
             old_mint.as_ref(),
-            &[self.takeover.bump],
+            &[bump],
         ];
+
+        let vault_amount = self.takeover_new_mint_vault.amount;
 
         burn(
             CpiContext::new_with_signer(

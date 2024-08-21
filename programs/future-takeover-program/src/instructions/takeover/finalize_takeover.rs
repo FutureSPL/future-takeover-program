@@ -17,7 +17,7 @@ pub struct FinalizeTakeover<'info> {
     pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -27,7 +27,9 @@ pub struct FinalizeTakeover<'info> {
 pub fn handler(ctx: Context<FinalizeTakeover>) -> Result<()> {
     // Ensure the admin has been initialized for more than 16 hours
     require_gt!(
-        Clock::get()?.unix_timestamp - ctx.accounts.admin_profile.creation_time,
+        Clock::get()?.unix_timestamp
+            .checked_sub(ctx.accounts.admin_profile.creation_time)
+            .ok_or(TakeoverError::Underflow)?,
         ADMIN_BUFFER,
         TakeoverError::UnauthorizedAdmin
     );
