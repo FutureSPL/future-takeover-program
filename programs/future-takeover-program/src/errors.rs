@@ -8,20 +8,48 @@ pub enum TakeoverError {
 
     #[msg("You need to wait 16h after the initialization of the admin to perform this action.")]
     UnauthorizedAdmin,
+
     #[msg("End time must be greater than start time && start time must be greater than current time.")]
     InvalidSwapPeriod,
     #[msg("You have to choosen a FDMC value that is not available")]
     InvalidFdmcValue,
-    #[msg("The takeover has already started.")]
-    TakeoverAlreadyStarted,
     #[msg("You used Invalid Inflation Amounts.")]
     InvalidInflationAmounts,
     #[msg("You used Invalid Token Extension Args.")]
     InvalidTokenExtensionArgs,
-    #[msg("You used Invalid Token Program.")]
-    InvalidTokenProgram,
-    #[msg("You used Invalid Associated Token Account.")]
+
+    #[msg("You used an Invalid Takeover Account.")]
+    InvalidTakeoverAddress,
+    #[msg("You used an Invalid Mint")]
+    InvalidMint,
+    #[msg("You used an Invalid Associated Token Account.")]
     InvalidAssociatedToken,
+    #[msg("You used an Invalid Token Program.")]
+    InvalidTokenProgram,
+    #[msg("You used an Invalid Remaining Account Schema.")]
+    InvalidRemainingAccountSchema,
+
+    #[msg("The Total doesn't add up to 100")]
+    InvalidTotalPercentage,
+
+    #[msg("The takeover has already started.")]
+    TakeoverAlreadyStarted,
+
+    #[msg("The "decimal" Input is not there.")]
+    DecimalsNotFound,
+    #[msg("The "old_tokens" Input is missing.")]
+    OldTokensNotFound,
+    #[msg("The "old_mint" Input is missing.")]
+    OldMintNotFound,
+    #[msg("The "weight_percentage" Input is missing.")]
+    WeightedPercentageNotFound,
+
+    #[msg("You passed too many mints (Max is 3)")]
+    TooManyMint,
+    #[msg("This Extension is not currently available.")]
+    ExtensionNotAvaialble,
+    #[msg("There are still non-zero amounts in the swap_receipt.")]
+    NonZeroAmountsRemain,
 
     // Takeover Errors
     #[msg("You need to wait for the swap period to start")]
@@ -48,7 +76,7 @@ pub enum TakeoverError {
     InsufficientFunds,
 
     #[msg("The Swap Instruction is missing.")]
-    MissingSwapIx,
+    SwapIxNotFound,
     #[msg("The Swap Instruction has invalid Slippage.")]
     InvalidSwapSlippage,
     #[msg("The Swap Instruction has invalid Amount.")]
@@ -63,21 +91,21 @@ pub enum TakeoverError {
     InvalidSwapDestinationTokenAccount,
 
     #[msg("The Finalize Sell Instruction is missing.")]
-    MissingFinalizeSellIx,
+    FinalizeSellIxNotFound,
     #[msg("The Finalize Sell Instruction has invalid Admin.")]
     InvalidFinalizeSellAdmin,
     #[msg("The Finalize Sell Instruction has invalid Takeover.")]
     InvalidFinalizeSellTakeover,
 
     #[msg("The Initialize Instruction is missing.")]
-    MissingInitializeTx,
+    InitializeTxNotFound,
     #[msg("The Initialize Instruction has invalid Amount.")]
     InvalidInitializeAmount,
     #[msg("The Initialize Instruction has invalid Mint Account.")]
     InvalidInitializeMintAccount,
 
     #[msg("The Increase Liquidity Instruction is missing.")]
-    MissingIncreaseLiquidityIx,
+    IncreaseLiquidityIxNotFound,
     #[msg("The Token A used to create the market is not the same as what you received.")]
     WrongAmountTokenA,
     #[msg("The Token B used to create the market is not the same as what you received.")]

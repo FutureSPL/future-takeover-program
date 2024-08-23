@@ -13,7 +13,7 @@ pub struct AdminProfile {
 
 #[account]
 pub struct Takeover {
-    pub old_mint: Pubkey,
+    pub old_mints: OldMints,
     pub new_mint: Pubkey,
     pub swap_period: SwapPeriod,
     pub takeover_wallet: Pubkey,
@@ -27,7 +27,7 @@ pub struct Takeover {
 }
 
 impl Space for Takeover {
-    const INIT_SPACE: usize = 8 + 32 + 32 + SwapPeriod::INIT_SPACE + 32 + (1 + 32) + InflationAmount::INIT_SPACE + 8 + 8 + 8 + Phase::INIT_SPACE + 1;
+    const INIT_SPACE: usize = 8 + OldMints::INIT_SPACE + 32 + SwapPeriod::INIT_SPACE + 32 + (1 + 32) + InflationAmount::INIT_SPACE + 8 + 8 + 8 + Phase::INIT_SPACE + 1;
 }
 
 #[account]
@@ -47,11 +47,12 @@ impl Space for PresaleReceipt {
 pub struct SwapReceipt {
     pub takeover: Pubkey,
     pub swapped_amount: u64,
+    pub swapped_old_mints: SwappedOldMints,
     pub bump: u8,
 }
 
 impl Space for SwapReceipt {
-    const INIT_SPACE: usize = 8 + 32 + 8 + 1;
+    const INIT_SPACE: usize = 8 + 32 + 8 + SwappedOldMints::INIT_SPACE + 1;
 }
 
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
@@ -67,6 +68,26 @@ pub struct InflationAmount {
     pub treasury_amount: u64,
     pub presale_amount: u64,
     pub referral_amount: u64
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
+pub struct OldMints {
+    pub old_mint: Pubkey,
+    pub weight_percentage: Option<u8>,
+    pub old_mint_2: Option<Pubkey>,
+    pub weight_percentage_2: Option<u8>,
+    pub old_mint_3: Option<Pubkey>,
+    pub weight_percentage_3: Option<u8>,
+}
+
+#[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]
+pub struct SwappedOldMints {
+    pub old_mint: Pubkey,
+    pub amount: u64,
+    pub old_mint_2: Option<Pubkey>,
+    pub amount_2: Option<u64>,
+    pub old_mint_3: Option<Pubkey>,
+    pub amount_3: Option<u64>,
 }
 
 #[derive(AnchorDeserialize, AnchorSerialize, Clone, InitSpace)]

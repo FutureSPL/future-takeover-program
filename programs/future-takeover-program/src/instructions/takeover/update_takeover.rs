@@ -26,7 +26,7 @@ pub struct UpdateTakeover<'info> {
 
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -35,6 +35,7 @@ pub struct UpdateTakeover<'info> {
 }
 
 impl<'info> UpdateTakeover<'info> {
+    // Update the Takeover State
     pub fn update_takeover(&mut self, start: i64, end: i64, takeover_wallet: Pubkey, presale_price: u64) -> Result<()> {
         self.takeover.swap_period.start = start;
         self.takeover.swap_period.end = end;
@@ -56,10 +57,8 @@ pub fn handler(ctx: Context<UpdateTakeover>, args: UpdateTakeoverArgs) -> Result
     // Check the Swap Period Parameters
     require!(args.start < args.end && args.start > Clock::get()?.unix_timestamp, TakeoverError::InvalidSwapPeriod);
 
-    // Update the Takeover State
-    if ctx.accounts.takeover.swap_period.start != args.start || ctx.accounts.takeover.swap_period.end != args.end || ctx.accounts.takeover.takeover_wallet != args.takeover_wallet || ctx.accounts.takeover.presale_price != args.presale_price{
-        ctx.accounts.update_takeover(args.start, args.end, args.takeover_wallet, args.presale_price)?;
-    }
+    // ACTIONS
+    ctx.accounts.update_takeover(args.start, args.end, args.takeover_wallet, args.presale_price)?;
 
     Ok(())
 }

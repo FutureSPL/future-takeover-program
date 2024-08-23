@@ -15,6 +15,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   createMint,
   mintTo,
+  burn,
   getOrCreateAssociatedTokenAccount,
   getAssociatedTokenAddressSync,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -27,7 +28,8 @@ describe("future-takeover-program", () => {
   const program = anchor.workspace.FutureTakeoverProgram as anchor.Program<FutureTakeoverProgram>;
 
   const tokenProgram1 = TOKEN_PROGRAM_ID;
-  const tokenProgram = TOKEN_2022_PROGRAM_ID;
+  // const tokenProgram = TOKEN_2022_PROGRAM_ID;
+  const tokenProgram = TOKEN_PROGRAM_ID;
   const metaplexTokenProgram = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
   const systemProgram = SystemProgram.programId;
   const associatedTokenProgram = ASSOCIATED_TOKEN_PROGRAM_ID;
@@ -56,7 +58,7 @@ describe("future-takeover-program", () => {
   // Accounts
   const takeoverWallet = Keypair.generate().publicKey;
 
-  const [admin, user, oldMint, newMint] = Array.from({ length: 4 }, () =>
+  const [admin, user, oldMint, oldMint2, oldMint3, newMint] = Array.from({ length: 6 }, () =>
     Keypair.generate()
   );
 
@@ -87,6 +89,12 @@ describe("future-takeover-program", () => {
 
   const userOldMintToken = getAssociatedTokenAddressSync(oldMint.publicKey, user.publicKey, false, tokenProgram1);
   const takeoverOldMintVault = getAssociatedTokenAddressSync(oldMint.publicKey, takeover, true, tokenProgram1);
+
+  const userOldMin2tToken = getAssociatedTokenAddressSync(oldMint2.publicKey, user.publicKey, false, tokenProgram1);
+  const takeoverOldMint2Vault = getAssociatedTokenAddressSync(oldMint2.publicKey, takeover, true, tokenProgram1);
+
+  const userOldMin3tToken = getAssociatedTokenAddressSync(oldMint3.publicKey, user.publicKey, false, tokenProgram1);
+  const takeoverOldMint3Vault = getAssociatedTokenAddressSync(oldMint3.publicKey, takeover, true, tokenProgram1);
 
   const userNewMintToken = getAssociatedTokenAddressSync(newMint.publicKey, user.publicKey, false, tokenProgram);
   const takeoverNewMintVault = getAssociatedTokenAddressSync(newMint.publicKey, takeover, true, tokenProgram);
@@ -151,20 +159,22 @@ describe("future-takeover-program", () => {
   // - Takeover Setup
   xit("Creates a New Takeover - Normal Token", async () => {
     const createTakeoverArgs = {
-      name: "Future", // string
-      symbol: "FUT", // string
-      uri: "https://arweave.net/123", // string
-      start: new anchor.BN(currentTimestamp + 25 * 60 * 60), // i64
-      end: new anchor.BN(currentTimestamp + 26 * 60 * 60), // i64
-      takeoverWallet: takeoverWallet, // pubkey
-      presalePrice: new anchor.BN(1e5), // u64
-      fdmc: 0, // u8
-      presaleInflation: 100, // u16
-      treasuryInflation: 100, // u16
-      rewardsInflation: 100, // u16
-      referral: null, // option<pubkey>
-      referralSplit: null, // option<u16>
-      tokenExtension: null, // option<TokenExtensionArgs>
+      name: "Future", 
+      symbol: "FUT", 
+      uri: "https://arweave.net/123", 
+      start: new anchor.BN(currentTimestamp + 25 * 60 * 60), 
+      end: new anchor.BN(currentTimestamp + 26 * 60 * 60), 
+      takeoverWallet,
+      presalePrice: new anchor.BN(1e5),
+      fdmc: 0, 
+      presaleInflation: 100, 
+      treasuryInflation: 100, 
+      rewardsInflation: 100, 
+      oldMints: null,
+      decimals: null,
+      referral: null, 
+      referralSplit: null,
+      tokenExtension: null,
     };
 
     await program.methods
@@ -173,7 +183,6 @@ describe("future-takeover-program", () => {
         admin: admin.publicKey,
         adminProfile,
         takeover,
-        oldMint: oldMint.publicKey,
         newMint: newMint.publicKey,
         metadata,
         takeoverNewMintVault,
@@ -184,8 +193,86 @@ describe("future-takeover-program", () => {
         rent: SYSVAR_RENT_PUBKEY,
         associatedTokenProgram
       })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey }
+      ])
       .signers([admin, newMint])
-      .rpc({skipPreflight: false}).then(log).then(confirm);
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+    console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.presaleAmount.toString());
+    console.log("Treasury Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.treasuryAmount.toString());
+    console.log("Rewards Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.rewardsAmount.toString());
+    console.log("OldMint 1: ", (await program.account.takeover.fetch(takeover)).oldMints.oldMint.toString());
+    console.log("OldMint 2: ", (await program.account.takeover.fetch(takeover)).oldMints.oldMint2.toString());
+  });
+
+  xit("Creates a New Takeover - Token2022", async () => {
+    const transferFeeArgs = {
+      feeAuthority: wallet.publicKey,
+      transferFeeBasisPoints: 100,
+    };
+    
+    const interestBearingArgs = {
+      rateAuthority: wallet.publicKey,
+      rate: 100,
+    };
+    
+    const closeMintArgs = {
+      closeMintAuthority: wallet.publicKey, 
+    };
+
+    const tokenExtensionArgs = {
+      transferFee: transferFeeArgs,
+      interestBearing: interestBearingArgs,
+      permanentDelegate: null,
+      closeMint: closeMintArgs, 
+      transferHook: null
+    };
+    
+    const createTakeoverArgs = {
+      name: "Future",
+      symbol: "FUT",
+      uri: "https://arweave.net/123",
+      start: new anchor.BN(currentTimestamp + 25 * 60 * 60),
+      end: new anchor.BN(currentTimestamp + 26 * 60 * 60),
+      takeoverWallet,
+      presalePrice: new anchor.BN(1e5),
+      fdmc: 0,
+      presaleInflation: 100,
+      treasuryInflation: 100,
+      rewardsInflation: 100,
+      oldMints: null,
+      decimals: null,
+      referral: null,
+      referralSplit: null,
+      tokenExtension: tokenExtensionArgs,
+    };
+
+    await program.methods
+      .createTakeover(createTakeoverArgs)
+      .accountsPartial({
+        admin: admin.publicKey,
+        adminProfile,
+        takeover,
+        newMint: newMint.publicKey,
+        metadata,
+        takeoverNewMintVault,
+        systemProgram,
+        sysvarInstructionProgram,
+        metaplexTokenProgram,
+        tokenProgram,
+        rent: SYSVAR_RENT_PUBKEY,
+        associatedTokenProgram
+      })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey }
+      ])
+      .signers([admin, newMint])
+      .rpc({skipPreflight: false});
+
+      console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.presaleAmount.toString());
+      console.log("Treasury Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.treasuryAmount.toString());
+      console.log("Rewards Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.rewardsAmount.toString());
   });
 
   xit("Update Takeover", async () => {
@@ -219,26 +306,28 @@ describe("future-takeover-program", () => {
         takeoverNewMintVault,
         systemProgram,
         tokenProgram,
-        associatedTokenProgram,
       })
       .signers([admin])
-      .rpc().then(log).then(confirm);
+      .rpc({skipPreflight: true}).then(log).then(confirm);
   });
 
-  it("Creates a New Takeover - Token2022", async () => {
+  xit("Creates a New Multiple Token Takeover - Normal Token", async () => {
+    await createMint(connection, wallet.payer, wallet.publicKey, null, 9, oldMint2, null, tokenProgram1);
+    await getOrCreateAssociatedTokenAccount(connection, wallet.payer, oldMint2.publicKey, user.publicKey, null, null, null, tokenProgram1);
+    await mintTo(connection, wallet.payer, oldMint2.publicKey, userOldMin2tToken, wallet.payer, 420_000_000 * 1e9, [], null, tokenProgram1);
+
+    await createMint(connection, wallet.payer, wallet.publicKey, null, 9, oldMint3, null, tokenProgram1);
+    await getOrCreateAssociatedTokenAccount(connection, wallet.payer, oldMint3.publicKey, user.publicKey, null, null, null, tokenProgram1);
+    await mintTo(connection, wallet.payer, oldMint3.publicKey, userOldMin3tToken, wallet.payer, 420_000_000 * 1e9, [], null, tokenProgram1);
+
     const transferFeeArgs = {
       feeAuthority: wallet.publicKey,
       transferFeeBasisPoints: 100,
-      maximumFee: new anchor.BN(1e5),
     };
     
     const interestBearingArgs = {
       rateAuthority: wallet.publicKey,
       rate: 100,
-    };
-    
-    const permanentDelegateArgs = {
-      delegateAuthority: wallet.publicKey,
     };
     
     const closeMintArgs = {
@@ -248,25 +337,35 @@ describe("future-takeover-program", () => {
     const tokenExtensionArgs = {
       transferFee: transferFeeArgs,
       interestBearing: interestBearingArgs,
-      permanentDelegate: permanentDelegateArgs,
+      permanentDelegate: null,
       closeMint: closeMintArgs, 
       transferHook: null
     };
-    
-    
+
+    const oldMints = {
+      oldMint: oldMint.publicKey,
+      weightPercentage: 30,
+      oldMint2: oldMint2.publicKey,
+      weightPercentage2: 50,
+      oldMint3: oldMint3.publicKey,
+      weightPercentage3: 20,
+    }
+
     const createTakeoverArgs = {
-      name: "Future",
-      symbol: "FUT",
-      uri: "https://arweave.net/123",
-      start: new anchor.BN(currentTimestamp + 25 * 60 * 60),
-      end: new anchor.BN(currentTimestamp + 26 * 60 * 60),
+      name: "Future", 
+      symbol: "FUT", 
+      uri: "https://arweave.net/123", 
+      start: new anchor.BN(currentTimestamp + 25 * 60 * 60), 
+      end: new anchor.BN(currentTimestamp + 26 * 60 * 60), 
       takeoverWallet,
       presalePrice: new anchor.BN(1e5),
-      fdmc: 0,
-      presaleInflation: 100,
-      treasuryInflation: 100,
-      rewardsInflation: 100,
-      referral: null,
+      fdmc: 0, 
+      presaleInflation: 100, 
+      treasuryInflation: 100, 
+      rewardsInflation: 100, 
+      oldMints,
+      decimals: 9,
+      referral: null, 
       referralSplit: null,
       tokenExtension: tokenExtensionArgs,
     };
@@ -277,7 +376,6 @@ describe("future-takeover-program", () => {
         admin: admin.publicKey,
         adminProfile,
         takeover,
-        oldMint: oldMint.publicKey,
         newMint: newMint.publicKey,
         metadata,
         takeoverNewMintVault,
@@ -288,127 +386,248 @@ describe("future-takeover-program", () => {
         rent: SYSVAR_RENT_PUBKEY,
         associatedTokenProgram
       })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey },
+        { isSigner: false, isWritable: false, pubkey: oldMint2.publicKey },
+        { isSigner: false, isWritable: false, pubkey: oldMint3.publicKey },
+      ])
       .signers([admin, newMint])
-      .rpc({skipPreflight: false});
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+      console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.presaleAmount.toString());
+      console.log("Treasury Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.treasuryAmount.toString());
+      console.log("Rewards Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.rewardsAmount.toString());
   });
 
-  xit("Swap Old Token", async () => {
-    try {
-      await program.methods
-        .swapOldToken()
-        .accountsPartial({
-          user: user.publicKey,
-          takeover,
-          swapReceipt,
-          oldMint: oldMint.publicKey,
-          userOldMintToken,
-          takeoverOldMintVault,
-          systemProgram,
-          tokenProgram,
-          associatedTokenProgram,
-        })
-        .signers([user])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
+  it("Creates a New Multiple Token Takeover - Token2022", async () => {
+    await createMint(connection, wallet.payer, wallet.publicKey, null, 9, oldMint2, null, tokenProgram1);
+    await getOrCreateAssociatedTokenAccount(connection, wallet.payer, oldMint2.publicKey, user.publicKey, null, null, null, tokenProgram1);
+    await mintTo(connection, wallet.payer, oldMint2.publicKey, userOldMin2tToken, wallet.payer, 420_000_000 * 1e9, [], null, tokenProgram1);
+
+    await createMint(connection, wallet.payer, wallet.publicKey, null, 9, oldMint3, null, tokenProgram1);
+    await getOrCreateAssociatedTokenAccount(connection, wallet.payer, oldMint3.publicKey, user.publicKey, null, null, null, tokenProgram1);
+    await mintTo(connection, wallet.payer, oldMint3.publicKey, userOldMin3tToken, wallet.payer, 420_000_000 * 1e9, [], null, tokenProgram1);
+
+    const oldMints = {
+      oldMint: oldMint.publicKey,
+      weightPercentage: 30,
+      oldMint2: oldMint2.publicKey,
+      weightPercentage2: 50,
+      oldMint3: oldMint3.publicKey,
+      weightPercentage3: 20,
     }
+
+    const createTakeoverArgs = {
+      name: "Future", 
+      symbol: "FUT", 
+      uri: "https://arweave.net/123", 
+      start: new anchor.BN(currentTimestamp + 25 * 60 * 60), 
+      end: new anchor.BN(currentTimestamp + 26 * 60 * 60), 
+      takeoverWallet,
+      presalePrice: new anchor.BN(1e5),
+      fdmc: 0, 
+      presaleInflation: 100, 
+      treasuryInflation: 100, 
+      rewardsInflation: 100, 
+      oldMints,
+      decimals: 9,
+      referral: null, 
+      referralSplit: null,
+      tokenExtension: null,
+    };
+
+    await program.methods
+      .createTakeover(createTakeoverArgs)
+      .accountsPartial({
+        admin: admin.publicKey,
+        adminProfile,
+        takeover,
+        newMint: newMint.publicKey,
+        metadata,
+        takeoverNewMintVault,
+        systemProgram,
+        sysvarInstructionProgram,
+        metaplexTokenProgram,
+        tokenProgram,
+        rent: SYSVAR_RENT_PUBKEY,
+        associatedTokenProgram
+      })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey },
+        { isSigner: false, isWritable: false, pubkey: oldMint2.publicKey },
+        { isSigner: false, isWritable: false, pubkey: oldMint3.publicKey },
+      ])
+      .signers([admin, newMint])
+      .rpc({skipPreflight: false}).then(log).then(confirm);
+
+      console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.presaleAmount.toString());
+      console.log("Treasury Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.treasuryAmount.toString());
+      console.log("Rewards Amount: ", (await program.account.takeover.fetch(takeover)).inflationAmount.rewardsAmount.toString());
   });
 
-  xit("Buy Presale - Fail", async () => {
-    try {
-      await program.methods
-        .buyPresale(new anchor.BN(200))
-        .accountsPartial({
-          user: user.publicKey,
-          takeover,
-          presaleReceipt,
-          takeoverVault,
-          newMint: newMint.publicKey,
-          systemProgram,
-        })
-        .signers([user])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
+  xit("Update Takeover", async () => {
+    const updateTakeoverArgs = {
+      start: new anchor.BN(currentTimestamp + 25 * 60 * 60),
+      end: new anchor.BN(currentTimestamp + 26 * 60 * 60),
+      takeoverWallet: Keypair.generate().publicKey,
+      presalePrice: new anchor.BN(1e5),
     }
+
+    await program.methods
+      .updateTakeover(updateTakeoverArgs)
+      .accountsPartial({
+        admin: admin.publicKey,
+        adminProfile,
+        takeover,
+        systemProgram,
+      })
+      .signers([admin])
+      .rpc().then(log).then(confirm);
   });
 
-  xit("Finalize Takeover - Failed", async () => {
-    try {
-      await program.methods
-        .finalizeTakeover()
-        .accountsPartial({
-          admin: admin.publicKey,
-          adminProfile,
-          takeover,
-          systemProgram,
-        })
-        .signers([admin])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
+  xit("Cancel Takeover", async () => {
+    await program.methods
+      .cancelTakeover()
+      .accountsPartial({
+        admin: admin.publicKey,
+        adminProfile,
+        takeover,
+        newMint: newMint.publicKey,
+        takeoverNewMintVault,
+        systemProgram,
+        tokenProgram,
+      })
+      .signers([admin])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
   });
 
-  xit("Claim Refund", async () => {
-    try {
-      await program.methods
-        .claimRefund()
-        .accountsPartial({
-          user: user.publicKey,
-          takeover,
-          presaleReceipt,
-          swapReceipt,
-          newMint: newMint.publicKey,
-          oldMint: oldMint.publicKey,
-          takeoverVault,
-          takeoverOldMintVault,
-          userOldMintToken,
-          systemProgram,
-          tokenProgram,
-          associatedTokenProgram,
-        })
-        .signers([user])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
+  // Note: here the TokenProgram is based on the old_mint token program
+  it("Swap Old Token", async () => {
+    console.log("User Token Balance: ", (await connection.getTokenAccountBalance(userOldMintToken)).value.amount.toString());
+    console.log("User Token2 Balance: ", (await connection.getTokenAccountBalance(userOldMin2tToken)).value.amount.toString());
+    console.log("User Token3 Balance: ", (await connection.getTokenAccountBalance(userOldMin3tToken)).value.amount.toString());
+
+    await program.methods
+      .swapOldToken()
+      .accountsPartial({
+        user: user.publicKey,
+        takeover,
+        swapReceipt,
+        systemProgram,
+        tokenProgram: tokenProgram1,
+        associatedTokenProgram,
+      })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMintToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMintVault },
+        { isSigner: false, isWritable: false, pubkey: oldMint2.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMin2tToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMint2Vault },
+        { isSigner: false, isWritable: false, pubkey: oldMint3.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMin3tToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMint3Vault },
+      ])
+      .signers([user])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+      console.log("Swapped Amount from Swap Receipt: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedAmount.toString());
+      console.log("Swapped Amount from Takeover: ", (await program.account.takeover.fetch(takeover)).tokenSwapped.toString());
+
+      console.log("Swapped Amount Token1: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount.toString());
+      console.log("Swapped Amount Token2: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount2.toString());
+      console.log("Swapped Amount Token3: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount3.toString());
   });
 
-  xit("Buy Presale - Success", async () => {
-    try {
-      await program.methods
-        .buyPresale(new anchor.BN(75_000_000))
-        .accountsPartial({
-          user: user.publicKey,
-          takeover,
-          presaleReceipt,
-          takeoverVault,
-          newMint: newMint.publicKey,
-          systemProgram,
-        })
-        .signers([user])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
+  it("Buy Presale", async () => {
+    await program.methods
+      .buyPresale(new anchor.BN(200))
+      .accountsPartial({
+        user: user.publicKey,
+        takeover,
+        presaleReceipt,
+        takeoverVault,
+        newMint: newMint.publicKey,
+        systemProgram,
+      })
+      .signers([user])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+      console.log("Presale Amount: ", (await program.account.presaleReceipt.fetch(presaleReceipt)).presaleAmount.toString());
+      console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).presaleClaimed.toString());
   });
 
-  xit("Finalize Takeover - Successful", async () => {
-    try {
-      await program.methods
-        .finalizeTakeover()
-        .accountsPartial({
-          admin: admin.publicKey,
-          adminProfile,
-          takeover,
-          systemProgram,
-        })
-        .signers([admin])
-        .rpc({skipPreflight: true}).then(log).then(confirm);
-    } catch (error) {
-      console.log(error);
-    }
+  it("Buy Presale", async () => {
+    await program.methods
+      .buyPresale(new anchor.BN(200))
+      .accountsPartial({
+        user: user.publicKey,
+        takeover,
+        presaleReceipt,
+        takeoverVault,
+        newMint: newMint.publicKey,
+        systemProgram,
+      })
+      .signers([user])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+      console.log("Presale Amount: ", (await program.account.presaleReceipt.fetch(presaleReceipt)).presaleAmount.toString());
+      console.log("Presale Amount: ", (await program.account.takeover.fetch(takeover)).presaleClaimed.toString());
+  });
+
+  it("Finalize Takeover", async () => {
+    await program.methods
+      .finalizeTakeover()
+      .accountsPartial({
+        admin: admin.publicKey,
+        adminProfile,
+        takeover,
+        systemProgram,
+      })
+      .signers([admin])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+  });
+
+  // Note: here the TokenProgram is based on the old_mint token program
+  it("Claim Refund", async () => {
+    await program.methods
+      .claimRefund()
+      .accountsPartial({
+        user: user.publicKey,
+        takeover,
+        presaleReceipt,
+        swapReceipt,
+        newMint: newMint.publicKey,
+        takeoverVault,
+        systemProgram,
+        tokenProgram: tokenProgram1,
+        associatedTokenProgram,
+      })
+      .remainingAccounts([
+        { isSigner: false, isWritable: false, pubkey: oldMint.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMintToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMintVault },
+        { isSigner: false, isWritable: false, pubkey: oldMint2.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMin2tToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMint2Vault },
+        { isSigner: false, isWritable: false, pubkey: oldMint3.publicKey },
+        { isSigner: false, isWritable: true, pubkey: userOldMin3tToken },
+        { isSigner: false, isWritable: true, pubkey: takeoverOldMint3Vault },
+      ])
+      .signers([user])
+      .rpc({skipPreflight: true}).then(log).then(confirm);
+
+      console.log("Presale Amount: ", (await program.account.presaleReceipt.fetch(presaleReceipt)).presaleAmount.toString());
+
+      console.log("Swapped Amount: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedAmount.toString());
+      console.log("Swapped Amount Token1: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount.toString());
+      console.log("Swapped Amount Token2: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount2.toString());
+      console.log("Swapped Amount Token3: ", (await program.account.swapReceipt.fetch(swapReceipt)).swappedOldMints.amount3.toString());
+
+      console.log("User Token Balance: ", (await connection.getTokenAccountBalance(userOldMintToken)).value.amount.toString());
+      console.log("User Token2 Balance: ", (await connection.getTokenAccountBalance(userOldMin2tToken)).value.amount.toString());
+      console.log("User Token3 Balance: ", (await connection.getTokenAccountBalance(userOldMin3tToken)).value.amount.toString());
+
   });
 
   const rewardWallet = Keypair.generate().publicKey;
@@ -434,26 +653,26 @@ describe("future-takeover-program", () => {
         associatedTokenProgram,
       })
       .signers([admin])
-      .rpc({skipPreflight: true}).then(log).then(confirm);
+      .rpc({skipPreflight: false}).then(log).then(confirm);
   });
 
   xit("Cleanup", async () => {
     await program.methods
       .cleanup()
       .accountsPartial({
-        admin: wallet.publicKey,
+        admin: admin.publicKey,
         adminProfile,
-        newMint: newMint.publicKey,
-        takeoverWallet,
-        newMintTakeoverWalletToken,
         takeover,
         newMintTakeoverVault,
         takeoverVault,
+        newMint: newMint.publicKey,
+        takeoverWallet,
+        newMintTakeoverWalletToken,
         systemProgram,
         tokenProgram,
         associatedTokenProgram,
       })
-      .signers([wallet.payer])
+      .signers([admin])
       .rpc({skipPreflight: true}).then(log).then(confirm);
   });
 
@@ -473,7 +692,7 @@ describe("future-takeover-program", () => {
         associatedTokenProgram,
       })
       .signers([user])
-      .rpc({skipPreflight: true}).then(log).then(confirm);
+      .rpc({skipPreflight: false}).then(log).then(confirm);
   });
 
   xit("Claim Remaining Tokens", async () => {
@@ -491,7 +710,7 @@ describe("future-takeover-program", () => {
         tokenProgram,
         associatedTokenProgram,
       })
-      .signers([user])
-      .rpc({skipPreflight: true}).then(log).then(confirm);
+      .signers([admin])
+      .rpc({skipPreflight: false}).then(log).then(confirm);
   });
 });

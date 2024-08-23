@@ -8,7 +8,7 @@ use anchor_spl::{
     token_interface::{ transfer_checked as spl_transfer, TransferChecked as SplTransfer, Mint, TokenInterface, TokenAccount }
 };
 
-use crate::{state::{ Takeover, AdminProfile, Phase::*}, errors::TakeoverError};
+use crate::{errors::TakeoverError, state::{ AdminProfile, Phase::*, Takeover}};
 
 #[derive(Accounts)]
 pub struct Cleanup<'info> {
@@ -18,29 +18,19 @@ pub struct Cleanup<'info> {
         seeds = [b"admin", admin.key().as_ref()],
         bump = admin_profile.bump,
     )]
-    pub admin_profile: Box<Account<'info, AdminProfile>>,
-
-    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
-    #[account(mut)]
-    pub takeover_wallet: SystemAccount<'info>,
-    #[account(
-        init_if_needed,
-        payer = admin,
-        associated_token::mint = new_mint,
-        associated_token::authority = takeover_wallet,
-    )]
-    pub new_mint_takeover_wallet_token: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = takeover_wallet
     )]
-    pub takeover: Box<Account<'info, Takeover>>,
+    pub takeover: Account<'info, Takeover>,
     #[account(
         mut,
         associated_token::mint = new_mint,
         associated_token::authority = takeover,
+        associated_token::token_program = token_program,
     )]
     pub new_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
@@ -49,23 +39,33 @@ pub struct Cleanup<'info> {
         bump,
     )]
     pub takeover_vault: SystemAccount<'info>,
-
+    pub new_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mut)]
+    pub takeover_wallet: SystemAccount<'info>,
+    #[account(
+        init_if_needed,
+        payer = admin,
+        associated_token::mint = new_mint,
+        associated_token::authority = takeover_wallet,
+        associated_token::token_program = token_program,
+    )]
+    pub new_mint_takeover_wallet_token: Box<InterfaceAccount<'info, TokenAccount>>,
     pub system_program: Program<'info, System>,
     pub token_program:  Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 impl<'info> Cleanup<'info> {
-    pub fn transfer_remaining_amount(&self) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.key();
+    pub fn transfer_remaining_tokens(&self) -> Result<()> {
+        let old_mint_key = self.takeover.old_mints.old_mint.key(); 
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
 
-        let amount = self.new_mint_takeover_vault.amount
+        let remaining_amount = self.new_mint_takeover_vault.amount
             .checked_sub(self.takeover.presale_claimed)
             .ok_or(TakeoverError::Underflow)?
             .checked_sub(self.takeover.token_swapped)
             .ok_or(TakeoverError::Underflow)?;
-        
+
         spl_transfer(
             CpiContext::new_with_signer(
                 self.token_program.to_account_info(),
@@ -77,17 +77,17 @@ impl<'info> Cleanup<'info> {
                 },
                 &[signer_seeds],
             ), 
-            amount,
-            self.new_mint.decimals
+            remaining_amount,
+            self.new_mint.decimals,
         )?;
 
         Ok(())
     }
 
-    pub fn transfer_remaining_sol(&self, bump: u8) -> Result<()> {
+    pub fn transfer_remaining_sol(&self) -> Result<()> {
         let takeover_key = self.takeover.key();
-        let signer_seeds = &[b"takeover_vault", takeover_key.as_ref(), &[bump]];        
-        
+        let signer_seeds = &[b"takeover_vault", takeover_key.as_ref(), &[self.takeover.bump]];        
+
         transfer(
             CpiContext::new_with_signer(
                 self.system_program.to_account_info(),
@@ -104,6 +104,7 @@ impl<'info> Cleanup<'info> {
     }
 }
 
+
 pub fn handler(ctx: Context<Cleanup>) -> Result<()> {
     // Check if it's the right phase
     match ctx.accounts.takeover.phase {
@@ -115,13 +116,17 @@ pub fn handler(ctx: Context<Cleanup>) -> Result<()> {
     ctx.accounts.takeover.phase = ClaimTokens;
 
     // Check if the takeover_wallet is the correct one
-    require!(ctx.accounts.takeover_wallet.key() == ctx.accounts.takeover.takeover_wallet, TakeoverError::InvalidTakeoverWallet);
+    require_eq!(
+        ctx.accounts.takeover_wallet.key(),
+        ctx.accounts.takeover.takeover_wallet,
+        TakeoverError::InvalidTakeoverWallet
+    );
 
-    // Transfer the remaining amount to the Takeover Wallet
-    ctx.accounts.transfer_remaining_amount()?;
+    // Transfer the remaining tokens to the Takeover Wallet
+    ctx.accounts.transfer_remaining_tokens()?;
 
-    // Transfer the remaining Sol to the Takeover Wallet
-    ctx.accounts.transfer_remaining_sol(ctx.bumps.takeover_vault)?;
+    // Transfer the remaining SOL to the Takeover Wallet
+    ctx.accounts.transfer_remaining_sol()?;
 
     Ok(())
 }

@@ -30,7 +30,26 @@ pub struct CreateMarket<'info> {
         bump = admin_profile.bump,
     )]
     pub admin_profile: Account<'info, AdminProfile>,
-
+    #[account(
+        mut,
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
+        bump = takeover.bump,
+        has_one = new_mint,
+    )]
+    pub takeover: Account<'info, Takeover>,
+    #[account(
+        mut,
+        associated_token::mint = new_mint,
+        associated_token::authority = takeover,
+        associated_token::token_program = token_program,
+    )]
+    pub new_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [b"takeover_vault", takeover.key().as_ref()],
+        bump,
+    )]
+    pub takeover_sol_vault: SystemAccount<'info>,
     pub new_mint: Box<InterfaceAccount<'info, Mint>>,
     #[account( address = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap())]
     pub wsol: Box<InterfaceAccount<'info, Mint>>,
@@ -48,26 +67,6 @@ pub struct CreateMarket<'info> {
         associated_token::authority = admin,
     )]
     pub wsol_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(
-        mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
-        bump = takeover.bump,
-        has_one = new_mint,
-    )]
-    pub takeover: Account<'info, Takeover>,
-    #[account(
-        mut,
-        associated_token::mint = new_mint,
-        associated_token::authority = takeover,
-    )]
-    pub new_mint_takeover_vault: Box<InterfaceAccount<'info, TokenAccount>>,
-    #[account(
-        mut,
-        seeds = [b"takeover_vault", takeover.key().as_ref()],
-        bump,
-    )]
-    pub takeover_sol_vault: SystemAccount<'info>,
-
     pub system_program: Program<'info, System>,
     pub token_program: Interface<'info, TokenInterface>,
     pub associated_token_program: Program<'info, AssociatedToken>
@@ -76,7 +75,7 @@ pub struct CreateMarket<'info> {
 impl<'info> CreateMarket<'info> {
     fn receieve_new_token(&mut self, amount: u64) -> Result<()> {
         // Transfer the old tokens from the vault to the user
-        let old_mint_key = self.takeover.old_mint.key().clone();
+        let old_mint_key = self.takeover.old_mints.old_mint.key().clone();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];    
 
         spl_transfer(
