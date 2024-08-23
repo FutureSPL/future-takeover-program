@@ -22,7 +22,7 @@ pub struct DistributeRewards<'info> {
     pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -59,7 +59,7 @@ pub struct DistributeRewards<'info> {
 
 impl<'info> DistributeRewards<'info> {
     pub fn transfer_referral_amount(&self) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.key();
+        let old_mint_key = self.takeover.old_mints.old_mint.key();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
         
         spl_transfer(
@@ -81,7 +81,7 @@ impl<'info> DistributeRewards<'info> {
     }
 
     pub fn transfer_reward_amount(&self) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.key();
+        let old_mint_key = self.takeover.old_mints.old_mint.key();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
         
         spl_transfer(

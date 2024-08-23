@@ -15,7 +15,7 @@ pub struct ClaimTokens<'info> {
     pub user: Signer<'info>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = new_mint,
     )]
@@ -58,12 +58,8 @@ pub struct ClaimTokens<'info> {
 
 impl<'info> ClaimTokens<'info> {
     pub fn claim_tokens(&mut self, amount: u64) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.clone();
-        let signer_seeds = &[
-            b"takeover",
-            old_mint_key.as_ref(),
-            &[self.takeover.bump],
-        ];
+        let old_mint_key = self.takeover.old_mints.old_mint.clone();
+        let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
 
         transfer_checked(
             CpiContext::new_with_signer(

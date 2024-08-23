@@ -32,7 +32,7 @@ pub struct CreateMarket<'info> {
     pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = new_mint,
     )]
@@ -75,7 +75,7 @@ pub struct CreateMarket<'info> {
 impl<'info> CreateMarket<'info> {
     fn receieve_new_token(&mut self, amount: u64) -> Result<()> {
         // Transfer the old tokens from the vault to the user
-        let old_mint_key = self.takeover.old_mint.key().clone();
+        let old_mint_key = self.takeover.old_mints.old_mint.key().clone();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];    
 
         spl_transfer(

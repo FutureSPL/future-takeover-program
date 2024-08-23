@@ -22,6 +22,7 @@ pub struct CancelTakeover<'info> {
         close = admin,
         seeds = [b"takeover", takeover.old_mints.old_mint.as_ref()],
         bump = takeover.bump,
+        has_one = new_mint,
     )]
     pub takeover: Account<'info, Takeover>,
     #[account(mut)]
@@ -38,17 +39,11 @@ pub struct CancelTakeover<'info> {
 }
 
 impl<'info> CancelTakeover<'info> {
-
     // Empty and burn the takeover vault amount
     fn burn_and_close_vault(&self) -> Result<()> {
         let old_mint = self.takeover.old_mints.old_mint.key();
         let bump = self.takeover.bump;
-
-        let signer_seeds = &[
-            b"takeover",
-            old_mint.as_ref(),
-            &[bump],
-        ];
+        let signer_seeds = &[b"takeover", old_mint.as_ref(), &[bump]];
 
         let vault_amount = self.takeover_new_mint_vault.amount;
 
@@ -99,6 +94,7 @@ pub fn handler(ctx: Context<CancelTakeover>) -> Result<()> {
     //     TakeoverError::TakeoverAlreadyStarted
     // );
 
+    // ACTIONS
     ctx.accounts.burn_and_close_vault()?;
 
     Ok(())

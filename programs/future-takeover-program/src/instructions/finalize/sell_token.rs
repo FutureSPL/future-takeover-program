@@ -53,9 +53,8 @@ pub struct SellToken<'info> {
     pub wsol_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        seeds = [b"takeover", old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
-        has_one = old_mint,
     )]
     pub takeover: Account<'info, Takeover>,
     #[account(
@@ -82,7 +81,7 @@ pub struct SellToken<'info> {
 impl<'info> SellToken<'info> {
     fn receieve_old_token(&mut self, amount: u64) -> Result<()> {
         // Transfer the old tokens from the vault to the user
-        let old_mint = self.takeover.old_mint.key().clone();
+        let old_mint = self.takeover.old_mints.old_mint.key().clone();
         let signer_seeds = &[b"takeover", old_mint.as_ref(), &[self.takeover.bump]];
 
         transfer_checked(
@@ -141,7 +140,7 @@ pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     // Check if the amount requested is valid
     require!(amount > 0, TakeoverError::InvalidAmount);
 
-    // Check if the Vault has enough tokens, if it's all the amount, then move to the next phase
+    // Check if the Vault has enough tokens, if it's all the amount, then move to the next phase - toFix
     if ctx.accounts.old_mint_takeover_vault.amount == amount {
         ctx.accounts.takeover.phase = MarketCreation;
     } else if ctx.accounts.old_mint_takeover_vault.amount < amount {
@@ -156,11 +155,11 @@ pub fn handler(ctx: Context<SellToken>, amount: u64) -> Result<()> {
     let current_index = load_current_index_checked(&ixs)? as usize;
 
     // Load & Check the Swap Instruction
-    let swap_ix = load_instruction_at_checked(current_index + 1, &ixs).map_err(|_| TakeoverError::MissingSwapIx)?;
+    let swap_ix = load_instruction_at_checked(current_index + 1, &ixs).map_err(|_| TakeoverError::SwapIxNotFound)?;
     ctx.accounts.introspect_swap(amount, swap_ix)?;
 
     // Load & Check the Finalize_sell Instruction
-    let finalize_sell_ix = load_instruction_at_checked(current_index + 2, &ixs).map_err(|_| TakeoverError::MissingFinalizeSellIx)?;
+    let finalize_sell_ix = load_instruction_at_checked(current_index + 2, &ixs).map_err(|_| TakeoverError::FinalizeSellIxNotFound)?;
     ctx.accounts.introspect_finalize_sell(finalize_sell_ix)?;
     
     Ok(())

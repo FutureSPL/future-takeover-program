@@ -5,17 +5,15 @@ use anchor_lang::{
 };
 
 use anchor_spl::{
-    associated_token::{ AssociatedToken, get_associated_token_address_with_program_id, create, Create },
-    metadata::{ Metadata, mpl_token_metadata::{ instructions::CreateV1CpiBuilder, types::TokenStandard }}, 
+    associated_token::{create, get_associated_token_address_with_program_id, AssociatedToken, Create},
+    metadata::{ mpl_token_metadata::{ instructions::CreateV1CpiBuilder, types::TokenStandard }, Metadata}, 
     token::ID as TOKEN_ID, 
     token_2022::spl_token_2022::{state::Mint as SplToken22Mint, ID as TOKEN_2022_ID}, 
     token_interface::{
-        Mint, TokenInterface, mint_to, MintTo, set_authority, SetAuthority, spl_pod, 
-        spl_token_2022::{
-            extension::{ ExtensionType, metadata_pointer::instruction::initialize as initialize_metadata_pointer, interest_bearing_mint::instruction::initialize as initialize_interest_bearing_mint, transfer_fee::instruction::initialize_transfer_fee_config, transfer_hook::instruction::initialize as initialize_transfer_hook },
+        mint_to, set_authority, spl_pod, spl_token_2022::{
+            extension::{ interest_bearing_mint::instruction::initialize as initialize_interest_bearing_mint, metadata_pointer::instruction::initialize as initialize_metadata_pointer, transfer_fee::instruction::initialize_transfer_fee_config, transfer_hook::instruction::initialize as initialize_transfer_hook, ExtensionType },
             instruction::{initialize_mint_close_authority, initialize_permanent_delegate, AuthorityType}
-        },
-        spl_token_metadata_interface::{instruction::initialize as initialize_metadata_interface, state::TokenMetadata},  
+        }, spl_token_metadata_interface::{instruction::initialize as initialize_metadata_interface, state::TokenMetadata}, Mint, MintTo, SetAuthority, TokenAccount, TokenInterface  
     }
 };
 
@@ -98,7 +96,7 @@ pub struct CreateTakeover<'info> {
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
     pub metadata: UncheckedAccount<'info>,
     #[account(mut)]
-    /// CHECK: This will be checked by the create_mint instruction
+    /// CHECK: This will be checked by the finalize_mint function
     pub takeover_new_mint_vault: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     /// CHECK: This will be checked by the Metaplex CreateV1Cpi instruction
@@ -110,12 +108,105 @@ pub struct CreateTakeover<'info> {
 }
 
 impl<'info> CreateTakeover<'info> {
+    // Calculate all the parameter needed for the Takeover
+    fn calculate_parameters(&mut self, remaining_accounts: &[AccountInfo<'info>], args: &CreateTakeoverArgs) -> Result<(u64, u8, OldMints)> {
+    
+        let mut supply: u64 = 0;
+        let decimals: u8; 
+        let old_mints: OldMints;
+        let mut token_program: Option<&Pubkey> = None;
+    
+        if remaining_accounts.len() == 1 {
+            let mint_account = remaining_accounts[0].clone();
+            let data = mint_account.try_borrow_mut_data()?;
+    
+            let mint = Mint::try_deserialize(&mut &data[..])
+                .map_err(|_| TakeoverError::InvalidMint)?;
+    
+            supply = supply
+                .checked_add(mint.supply)
+                .ok_or(TakeoverError::Overflow)?;
+    
+            decimals = mint.decimals;
+    
+            old_mints = OldMints {
+                old_mint: mint_account.key(),
+                weight_percentage: None,
+                old_mint_2: None,
+                weight_percentage_2: None,
+                old_mint_3: None,
+                weight_percentage_3: None,
+            };
+    
+        } else {
+            old_mints = args.old_mints.as_ref()
+                .ok_or(TakeoverError::OldTokensNotFound)?
+                .clone();
+            
+            let mut total_percentage: u8 = 0;
+    
+            match remaining_accounts.len() {
+                1 => require!(old_mints.old_mint_2.is_none() && old_mints.old_mint_3.is_none(), TakeoverError::InvalidMint),
+                2 => require!(old_mints.old_mint_3.is_none(), TakeoverError::InvalidMint),
+                3 => (),
+                _ => return Err(TakeoverError::TooManyMint.into()),
+            }
+    
+            for (i, account) in remaining_accounts.iter().enumerate() {
+    
+                let (mint, weight) = match i {
+                    0 => (old_mints.old_mint, old_mints.weight_percentage.ok_or(TakeoverError::WeightedPercentageNotFound)?),
+                    1 => (old_mints.old_mint_2.ok_or(TakeoverError::OldMintNotFound)?, old_mints.weight_percentage_2.ok_or(TakeoverError::WeightedPercentageNotFound)?),
+                    2 => (old_mints.old_mint_3.ok_or(TakeoverError::OldMintNotFound)?, old_mints.weight_percentage_3.ok_or(TakeoverError::WeightedPercentageNotFound)?),
+                    _ => return Err(TakeoverError::TooManyMint.into()),
+                };
+
+                // Ensure the account key matches the old_mint
+                require_eq!(account.key(), mint, TakeoverError::InvalidMint);
+
+                // Check that all the Mint have the same token program
+                match token_program {
+                    None => token_program = Some(account.owner),
+                    Some(ref token_program) => require_eq!(token_program, &account.owner, TakeoverError::InvalidTokenProgram),
+                }
+                
+                // Deserialize the mint data
+                let data = account.try_borrow_mut_data()?;
+                let mint = Mint::try_deserialize(&mut &data[..])
+                    .map_err(|_| TakeoverError::InvalidMint)?;
+    
+                // Update the supply using the weight percentage
+                let weighted_supply = mint.supply
+                    .checked_div(100)
+                    .ok_or(TakeoverError::Underflow)?
+                    .checked_mul(weight as u64)
+                    .ok_or(TakeoverError::Overflow)?;
+    
+                supply = supply
+                    .checked_add(weighted_supply)
+                    .ok_or(TakeoverError::Overflow)?;
+            
+                // Accumulate the total percentage from old_mints
+                total_percentage = total_percentage
+                    .checked_add(weight)
+                    .ok_or(TakeoverError::Overflow)?;
+            }
+            
+            // Ensure that total_percentage is within expected bounds
+            require_eq!(total_percentage, 100, TakeoverError::InvalidTotalPercentage);
+    
+            decimals = args.decimals.ok_or(TakeoverError::DecimalsNotFound)?;
+        }
+    
+        // Return the final tuple with supply, decimals, and old_mints
+        Ok((supply, decimals, old_mints))
+    }
+    
     // Initialize a new Takeover Account
     fn initialize_takeover(&mut self,  old_mints: OldMints, inflation_amount: InflationAmount, swap_period: SwapPeriod, takeover_wallet: Pubkey, presale_price: u64, referral: Option<Pubkey>) -> Result<()> {
 
-        let takeover = Pubkey::find_program_address(&[b"takeover", old_mints.old_mint.as_ref()], &MIGRATION_PROGRAM_ID);
-        require_eq!(takeover.0, self.takeover.key(), TakeoverError::InvalidTakeoverAddress);
-        let bump = takeover.1;
+        let (takeover, bump) = Pubkey::find_program_address(&[b"takeover", old_mints.old_mint.as_ref()], &MIGRATION_PROGRAM_ID);
+        require_eq!(takeover, self.takeover.key(), TakeoverError::InvalidTakeoverAddress);
 
         let signer_seeds = &[b"takeover", old_mints.old_mint.as_ref(), &[bump]];
         let lamports = self.rent.minimum_balance(Takeover::INIT_SPACE);
@@ -206,6 +297,8 @@ impl<'info> CreateTakeover<'info> {
             .token_standard(TokenStandard::Fungible)
             .invoke()?;
 
+        msg!("Metaplex Metadata Account Created");
+        
         Ok(())
     }
 
@@ -222,7 +315,8 @@ impl<'info> CreateTakeover<'info> {
         }
 
         if token_extension.permanent_delegate.is_some() {
-            extension_types.push(ExtensionType::PermanentDelegate);
+            return Err(TakeoverError::ExtensionNotAvaialble.into());
+            // extension_types.push(ExtensionType::PermanentDelegate);
         }
 
         if token_extension.transfer_fee.is_some() {
@@ -329,18 +423,17 @@ impl<'info> CreateTakeover<'info> {
             )?;
         }
 
-        // Unavailable for the moment
-        // if let Some(transfer_hook) = token_extension.transfer_hook {
-        //     invoke(
-        //         &initialize_transfer_hook(
-        //             &self.token_program.key(),
-        //             &self.new_mint.key(),
-        //             Some(transfer_hook.hook_authority),
-        //             Some(transfer_hook.hook_program_id),
-        //         )?,
-        //         &vec![self.new_mint.to_account_info()],
-        //     )?;
-        // }
+        if let Some(transfer_hook) = token_extension.transfer_hook {
+            invoke(
+                &initialize_transfer_hook(
+                    &self.token_program.key(),
+                    &self.new_mint.key(),
+                    Some(transfer_hook.hook_authority),
+                    Some(transfer_hook.hook_program_id),
+                )?,
+                &vec![self.new_mint.to_account_info()],
+            )?;
+        }
 
         anchor_spl::token_2022::initialize_mint2(
             CpiContext::new(
@@ -377,29 +470,25 @@ impl<'info> CreateTakeover<'info> {
     // Create the ATA, Mint to the Takeover Vault and Set the Mint Authority to None
     fn finalize_mint(&self, inflation_amount: InflationAmount, supply: u64) -> Result<()> {
         require_eq!(
-            self.takeover_new_mint_vault.key(), 
-            get_associated_token_address_with_program_id(
-                &self.takeover.key(), 
-                &self.new_mint.key(),
-                &self.token_program.key()
-            ), 
+            self.takeover_new_mint_vault.key(),
+            get_associated_token_address_with_program_id(self.takeover.key, self.new_mint.key, self.token_program.key),
             TakeoverError::InvalidAssociatedToken
         );
 
         create(
             CpiContext::new(
-                self.token_program.to_account_info(),
+                self.associated_token_program.to_account_info(),
                 Create {
-                    payer: self.admin.to_account_info(),
                     associated_token: self.takeover_new_mint_vault.to_account_info(),
                     authority: self.takeover.to_account_info(),
+                    payer: self.admin.to_account_info(),
                     mint: self.new_mint.to_account_info(),
                     system_program: self.system_program.to_account_info(),
                     token_program: self.token_program.to_account_info(),
-                }
-            )
+                },
+            ),
         )?;
-
+        
         let amount = supply
             .checked_add(inflation_amount.presale_amount.clone())
             .ok_or(TakeoverError::Overflow)?
@@ -436,7 +525,7 @@ impl<'info> CreateTakeover<'info> {
     }
 }
 
-pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'_, '_, '_, 'info, CreateTakeover<'info>>, args: CreateTakeoverArgs) -> Result<()> {
     // Check if the admin has been initialized more than 16h ago
     require_gte!(
         Clock::get()?.unix_timestamp
@@ -452,81 +541,8 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
         TakeoverError::InvalidSwapPeriod
     );
 
-    let mut supply: u64 = 0;
-    let decimals: u8;
-    let old_mints: OldMints;
-    
-    if ctx.remaining_accounts.len() == 1 {
-        let mint_account = ctx.remaining_accounts[0].clone();
-        let data = mint_account.try_borrow_mut_data()?;
-
-        let mint = Mint::try_deserialize(&mut &data[..])
-            .map_err(|_| TakeoverError::InvalidMint)?;
-
-        supply = supply
-            .checked_add(mint.supply)
-            .ok_or(TakeoverError::Overflow)?;
-
-        decimals = mint.decimals;
-
-        old_mints = OldMints {
-            old_mint: mint_account.key(),
-            weight_percentage: None,
-            old_mint_2: None,
-            weight_percentage_2: None,
-            old_mint_3: None,
-            weight_percentage_3: None,
-        };
-
-    } else {
-        old_mints = args.old_mints
-            .ok_or(TakeoverError::OldTokensNotFound)?
-            .clone();
-        
-        let mut total_percentage: u8 = 0;
-
-        for (i, account) in ctx.remaining_accounts.iter().enumerate() {
-            let old_token_value = match i {
-                0 => Some((old_mints.old_mint, old_mints.weight_percentage)),
-                1 => old_mints.old_mint_2.map(|mint| (mint, old_mints.weight_percentage_2)),
-                2 => old_mints.old_mint_3.map(|mint| (mint, old_mints.weight_percentage_3)),
-                _ => return Err(TakeoverError::TooManyMint.into()), // Handle the case of more than 3 accounts
-            };
-        
-            let (old_mint, weight_percentage) = old_token_value.ok_or(TakeoverError::OldTokensNotFound)?;
-        
-            let weight_percentage = weight_percentage.ok_or(TakeoverError::InvalidMint)?;
-        
-            // Ensure the account key matches the old_mint
-            require_eq!(account.key(), old_mint, TakeoverError::InvalidMint);
-        
-            // Deserialize the mint data
-            let data = account.try_borrow_mut_data()?;
-            let mint = Mint::try_deserialize(&mut &data[..])
-                .map_err(|_| TakeoverError::InvalidMint)?;
-
-            // Update the supply using the weight percentage
-            let weighted_supply = mint.supply
-                .checked_div(100)
-                .ok_or(TakeoverError::Underflow)?
-                .checked_mul(weight_percentage as u64)
-                .ok_or(TakeoverError::Overflow)?;
-
-            supply = supply
-                .checked_add(weighted_supply)
-                .ok_or(TakeoverError::Overflow)?;
-        
-            // Accumulate the total percentage from old_mints
-            total_percentage = total_percentage
-                .checked_add(weight_percentage)
-                .ok_or(TakeoverError::Overflow)?;
-        }
-        
-        // Ensure that total_percentage is within expected bounds
-        require_eq!(total_percentage, 100, TakeoverError::InvalidTotalPercentage);
-
-        decimals = args.decimals.ok_or(TakeoverError::DecimalsNotFound)?;
-    }
+    // ACTIONS
+    let (supply, decimals,old_mints) = ctx.accounts.calculate_parameters(ctx.remaining_accounts, &args)?;
 
     // Calculate the Presale Amount
     let presale_amount = supply
@@ -568,10 +584,22 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
     };
 
     // Calculate the Inflation Amounts
+    require!(
+        args.presale_inflation > 0 && 
+        args.treasury_inflation > 0 && 
+        (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT),
+        TakeoverError::InvalidInflationAmounts
+    );
+
     let inflation_amount = match args.fdmc {
         0 => {
-            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-            args.presale_inflation <= LOW_PRESALE_BASIS_POINT && args.treasury_inflation <= LOW_TREASURY_BASIS_POINT && args.rewards_inflation <= LOW_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            require!(
+                args.presale_inflation <= LOW_PRESALE_BASIS_POINT && 
+                args.treasury_inflation <= LOW_TREASURY_BASIS_POINT && 
+                args.rewards_inflation <= LOW_REWARDS_BASIS_POINT, 
+                TakeoverError::InvalidInflationAmounts
+            );
+
             InflationAmount {
                 level: Level::Low,
                 presale_amount,
@@ -581,8 +609,13 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
             }
         },
         1 => {
-            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-            args.presale_inflation <= MEDIUM_PRESALE_BASIS_POINT && args.treasury_inflation <= MEDIUM_TREASURY_BASIS_POINT && args.rewards_inflation <= MEDIUM_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            require!(
+                args.presale_inflation <= MEDIUM_PRESALE_BASIS_POINT 
+                && args.treasury_inflation <= MEDIUM_TREASURY_BASIS_POINT 
+                && args.rewards_inflation <= MEDIUM_REWARDS_BASIS_POINT, 
+                TakeoverError::InvalidInflationAmounts
+            );
+
             InflationAmount {
                 level: Level::Medium,
                 presale_amount,
@@ -592,8 +625,13 @@ pub fn handler(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result
             }
         },
         2 => {
-            require!(args.presale_inflation > 0 && args.treasury_inflation > 0 && (args.referral_split.is_none() || args.referral_split.unwrap() <= MAX_REFERRAL_BASIS_POINT) &&
-            args.presale_inflation <= HIGH_PRESALE_BASIS_POINT && args.treasury_inflation <= HIGH_TREASURY_BASIS_POINT && args.rewards_inflation <= HIGH_REWARDS_BASIS_POINT, TakeoverError::InvalidInflationAmounts);
+            require!(
+                args.presale_inflation <= HIGH_PRESALE_BASIS_POINT && 
+                args.treasury_inflation <= HIGH_TREASURY_BASIS_POINT && 
+                args.rewards_inflation <= HIGH_REWARDS_BASIS_POINT, 
+                TakeoverError::InvalidInflationAmounts
+            );
+
             InflationAmount {
                 level: Level::High,
                 presale_amount,

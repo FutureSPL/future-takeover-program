@@ -21,7 +21,7 @@ pub struct Cleanup<'info> {
     pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = takeover_wallet
     )]
@@ -57,12 +57,8 @@ pub struct Cleanup<'info> {
 
 impl<'info> Cleanup<'info> {
     pub fn transfer_remaining_tokens(&self) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.key(); 
-        let signer_seeds = &[
-            b"takeover",
-            old_mint_key.as_ref(),
-            &[self.takeover.bump],
-        ];
+        let old_mint_key = self.takeover.old_mints.old_mint.key(); 
+        let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
 
         let remaining_amount = self.new_mint_takeover_vault.amount
             .checked_sub(self.takeover.presale_claimed)
@@ -90,11 +86,7 @@ impl<'info> Cleanup<'info> {
 
     pub fn transfer_remaining_sol(&self) -> Result<()> {
         let takeover_key = self.takeover.key();
-        let signer_seeds = &[
-            b"takeover_vault",
-            takeover_key.as_ref(),
-            &[self.takeover.bump],
-        ];        
+        let signer_seeds = &[b"takeover_vault", takeover_key.as_ref(), &[self.takeover.bump]];        
 
         transfer(
             CpiContext::new_with_signer(

@@ -15,7 +15,7 @@ pub struct BuyPresale<'info> {
     pub user: Signer<'info>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Account<'info, Takeover>,
@@ -50,7 +50,7 @@ impl<'info> BuyPresale<'info> {
     }
 
     // Execute the presale purchase and transfer the funds to the takeover vault
-    pub fn execute_presale(&self, amount: u64) -> Result<()> {
+    pub fn buy_presale(&self, amount: u64) -> Result<()> {
         let transfer_amount = self.takeover.presale_price
             .checked_mul(amount)
             .ok_or(TakeoverError::Overflow)?;
@@ -96,9 +96,10 @@ pub fn handler(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
         TakeoverError::NotEnoughTokens
     );
    
+   // ACTIONS
    ctx.accounts.initialize_receipt(amount_in_decimals, ctx.bumps.presale_receipt)?;
 
-   ctx.accounts.execute_presale(amount)?;
+   ctx.accounts.buy_presale(amount)?;
 
     // Add the presale_amount to the Takeover State
     ctx.accounts.takeover.presale_claimed = ctx.accounts.takeover.presale_claimed

@@ -18,7 +18,7 @@ pub struct ClaimRemainingTokens<'info> {
     pub admin_profile: Account<'info, AdminProfile>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
         has_one = takeover_wallet,
         has_one = new_mint,
@@ -49,7 +49,7 @@ pub struct ClaimRemainingTokens<'info> {
 
 impl<'info> ClaimRemainingTokens<'info> {
     pub fn transfer_remaining_amount(&self) -> Result<()> {
-        let old_mint_key = self.takeover.old_mint.key();
+        let old_mint_key = self.takeover.old_mints.old_mint.key();
         let signer_seeds = &[b"takeover", old_mint_key.as_ref(), &[self.takeover.bump]];
         
         spl_transfer(

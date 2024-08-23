@@ -34,7 +34,7 @@ pub struct FinalizeSellToken<'info> {
     pub wsol_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Box<Account<'info, Takeover>>,
