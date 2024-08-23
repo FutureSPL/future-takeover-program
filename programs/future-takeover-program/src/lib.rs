@@ -7,7 +7,7 @@ pub mod constant;
 pub mod instructions;
 pub use instructions::*;
 
-declare_id!("DWF1qAyiiKbSsuRSBBnJmQF6ePkCbtWsks8YwXVrPCcN");
+declare_id!("HB5Ybd6Rm37Q5JFy1LQZ3UDU66XiHvDVDcgn2DGYLzk5");
 
 #[program]
 pub mod future_takeover_program {
@@ -15,7 +15,6 @@ pub mod future_takeover_program {
 
     // Setup Instructions
 
-    // - Admin Setup
     pub fn admin_init(ctx: Context<AdminInit>, username: String) -> Result<()> {
         instructions::admin_init::handler(ctx, username)
     }
@@ -24,8 +23,8 @@ pub mod future_takeover_program {
         instructions::admin_delete::handler(ctx)
     }
 
-    // - Takeover Setup
-    pub fn create_takeover(ctx: Context<CreateTakeover>, args: CreateTakeoverArgs) -> Result<()> {
+    // Takeover Instructions
+    pub fn create_takeover<'info>(ctx: Context<'_, '_, '_, 'info, CreateTakeover<'info>>, args: CreateTakeoverArgs) -> Result<()> {
         instructions::create_takeover::handler(ctx, args)
     }
 
@@ -37,19 +36,20 @@ pub mod future_takeover_program {
         instructions::cancel_takeover::handler(ctx)
     }
 
-    // Takeover Instructions
+    pub fn finalize_takeover(ctx: Context<FinalizeTakeover>) -> Result<()> {
+        instructions::finalize_takeover::handler(ctx)
+    }
+
+    // User Action Instructions
     pub fn buy_presale(ctx: Context<BuyPresale>, amount: u64) -> Result<()> {
         instructions::buy_presale::handler(ctx, amount)
     }
 
-    pub fn swap_old_token(ctx: Context<SwapOldToken>) -> Result<()> {
+    pub fn swap_old_token<'info>(ctx: Context<'_, '_, '_, 'info, SwapOldToken<'info>>) -> Result<()> {
         instructions::swap_old_token::handler(ctx)
     }
 
     // Finalize Instructions
-    pub fn finalize_takeover(ctx: Context<FinalizeTakeover>) -> Result<()> {
-        instructions::finalize_takeover::handler(ctx)
-    }
 
     // - Successful Takeover
     pub fn sell_token(ctx: Context<SellToken>, amount: u64) -> Result<()> {
@@ -76,8 +76,12 @@ pub mod future_takeover_program {
         instructions::claim_tokens::handler(ctx)
     }
 
-    // - Failed Takeover    
-    pub fn claim_refund(ctx: Context<ClaimRefund>) -> Result<()> {
-        instructions::claim_refund::handler(ctx)
+    pub fn claim_remaining_tokens(ctx: Context<ClaimRemainingTokens>) -> Result<()> {
+        instructions::claim_remaining_tokens::handler(ctx)
     }
+
+    // // - Failed Takeover  
+    pub fn claim_refund<'info>(ctx: Context<'_, '_, '_, 'info, ClaimRefund<'info>>) -> Result<()> {
+        instructions::claim_refund::handler(ctx)
+    }  
 }

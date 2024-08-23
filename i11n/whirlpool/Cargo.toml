@@ -9,5 +9,5 @@ crate-type = ["cdylib", "lib"]
 name = "whirlpool_sdk"
 
 [dependencies]
-anchor-lang = "0.30.0"
+anchor-lang = "0.30.1"
 anchor-i11n = { git = "https://github.com/deanmlittle/anchor-i11n.git" }

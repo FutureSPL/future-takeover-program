@@ -6,12 +6,10 @@ use anchor_lang::{
         self,
         instructions::{load_current_index_checked, load_instruction_at_checked},
     },
-    system_program::{transfer, Transfer},
 };
 
-use anchor_spl::token::{ Mint, Token, TokenAccount, close_account, CloseAccount };
+use anchor_spl::token_interface::{ Mint, TokenInterface, TokenAccount, close_account, CloseAccount };
 
-use jupiter_sdk::i11n::RouteI11n;
 use future_takeover_program_sdk::i11n::SellTokenI11n;
 
 use crate::state::{Takeover, AdminProfile};
@@ -27,16 +25,16 @@ pub struct FinalizeSellToken<'info> {
     pub admin_profile: Box<Account<'info, AdminProfile>>,
 
     #[account( address = Pubkey::from_str("So11111111111111111111111111111111111111112").unwrap())]
-    pub wsol: Box<Account<'info, Mint>>,
+    pub wsol: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = wsol,
         associated_token::authority = admin,
     )]
-    pub wsol_admin_token: Box<Account<'info, TokenAccount>>,
+    pub wsol_admin_token: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
-        seeds = [b"takeover", takeover.old_mint.key().as_ref()],
+        seeds = [b"takeover", takeover.old_mints.old_mint.key().as_ref()],
         bump = takeover.bump,
     )]
     pub takeover: Box<Account<'info, Takeover>>,
@@ -48,7 +46,7 @@ pub struct FinalizeSellToken<'info> {
     pub takeover_sol_vault: SystemAccount<'info>,
 
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
+    pub token_program: Interface<'info, TokenInterface>,
     /// CHECK: InstructionsSysvar account
     #[account(address = sysvar::instructions::ID)]
     instructions: UncheckedAccount<'info>,
